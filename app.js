@@ -137,6 +137,21 @@
     observeReveals(grid);
   }
 
+  // Proyectos con vista propia y pestañas por fases (project.view o, si falta, project.id)
+  const VISTAS = {
+    zaragoza: {
+      fases: () => window.LEZG_FASES || [{ id: 'demanda', label: 'Demanda 2025–2050' }],
+      render: (id, el) => {
+        if (id === 'demanda') { if (typeof window.renderZaragozaProject === 'function') window.renderZaragozaProject(el); }
+        else if (typeof window.renderLezgFase === 'function') window.renderLezgFase(id, el);
+      }
+    },
+    servo: {
+      fases: () => window.SERVO_FASES || [],
+      render: (id, el) => { if (typeof window.renderServoFase === 'function') window.renderServoFase(id, el); }
+    }
+  };
+
   // Coloca la línea naranja bajo la pestaña activa
   function syncTabIndicator() {
     const tabsEl = document.getElementById('section-tabs');
@@ -178,16 +193,13 @@
     // Tabs con indicador deslizante
     tabsEl.innerHTML = '<span class="section-tabs-indicator" aria-hidden="true"></span>';
 
-    if (projectId === 'zaragoza') {
+    const vista = VISTAS[project.view || project.id];
+    if (vista) {
       const showPhase = (fase) => {
-        if (fase.id === 'demanda') {
-          if (typeof window.renderZaragozaProject === 'function') window.renderZaragozaProject(contentEl);
-        } else if (typeof window.renderLezgFase === 'function') {
-          window.renderLezgFase(fase.id, contentEl);
-        }
+        vista.render(fase.id, contentEl);
         observeReveals(contentEl);
       };
-      const fases = window.LEZG_FASES || [{ id: 'demanda', label: 'Demanda 2025–2050' }];
+      const fases = vista.fases();
       const inicial = fases.find(f => f.id === subId) || fases[0];
       fases.forEach((fase, i) => {
         const tab = document.createElement('button');
@@ -808,9 +820,9 @@
     if (statProjects) statProjects.textContent = PROJECTS.length;
     const statSections = document.getElementById('stat-sections');
     if (statSections) {
-      // Las fases publicadas de Zaragoza cuentan como análisis aunque no estén en PROJECTS
-      const fasesZgz = (window.LEZG_FASES || []).filter(f => !f.pending).length;
-      const total = PROJECTS.reduce((sum, p) => sum + p.sections.length, 0) + fasesZgz;
+      // Las fases publicadas de las vistas propias cuentan como análisis aunque no estén en sections
+      const fasesPropias = [window.LEZG_FASES, window.SERVO_FASES].reduce((n, f) => n + (f || []).filter(x => !x.pending).length, 0);
+      const total = PROJECTS.reduce((sum, p) => sum + p.sections.length, 0) + fasesPropias;
       statSections.textContent = total;
     }
   }

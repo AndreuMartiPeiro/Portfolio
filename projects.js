@@ -347,5 +347,17 @@ La <strong>zona verde sombreada</strong> marca la ventana de crucero operativo d
     status: "Completado",
     date: "2026",
     sections: []
+  },
+  {
+    id: "seguimiento-leo",
+    title: "Seguimiento de un satélite de órbita baja desde una estación terrena",
+    subtitle: "Pasada orbital, PID digital del pedestal, pérdida de apuntamiento del haz y balance del enlace, en una sola cadena de simulación",
+    description: "Simulador interactivo que encadena la pasada de un satélite LEO, el lazo de seguimiento del pedestal (PID digital corregido de la Práctica 1), la pérdida por error de apuntamiento con el diagrama del reflector (Práctica 4) y el alcance y el margen del enlace.",
+    tags: ["Control digital", "PID", "Mecánica orbital", "Antenas", "Radar", "Simulación"],
+    image: "",
+    status: "En progreso",
+    date: "2026",
+    view: "servo",
+    sections: []
   }
 ];
