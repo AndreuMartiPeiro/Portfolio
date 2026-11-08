@@ -3003,6 +3003,21 @@ body.zgz-mode {
 
 /* Resalte breve del paso o bloque al que lleva un escenario: línea de 1 px, sin brillo */
 .servo-paso, .servo-bloque { outline: 1px solid transparent; outline-offset: 6px; }
+/* Destino del escenario activo: borde naranja discreto donde se ve el cambio */
+.servo-paso.servo-destino { border-color: var(--accent-line); transition: border-color var(--dur-3) var(--ease-out); }
+.servo-bloque.servo-destino { outline-color: var(--accent-line); transition: outline-color var(--dur-3) var(--ease-out); }
+.servo-flecha {
+  position: fixed; left: 50%; bottom: var(--space-lg); transform: translateX(-50%); z-index: 40;
+  display: inline-flex; align-items: center; gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md); border: 1px solid var(--accent-line); border-radius: 999px;
+  background: var(--bg-raised); color: var(--accent); cursor: pointer;
+  font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase;
+  animation: servoFlechaEntra var(--dur-3) var(--ease-out) both;
+}
+.servo-flecha svg { animation: servoFlechaBaja 1.6s var(--ease-out) infinite; }
+.servo-flecha:hover { background: var(--accent-soft); }
+@keyframes servoFlechaEntra { from { opacity: 0; transform: translate(-50%, 8px); } }
+@keyframes servoFlechaBaja { 0%, 100% { transform: translateY(-1px); } 50% { transform: translateY(3px); } }
 .servo-bloque { scroll-margin-top: calc(var(--nav-h) + 4.5rem); border-radius: var(--radius-sm); }
 .servo-paso.servo-resaltado { animation: servoResaltePaso calc(var(--dur-4) * 2) var(--ease-out) var(--dur-2) both; }
 .servo-bloque.servo-resaltado { animation: servoResalteBloque calc(var(--dur-4) * 2) var(--ease-out) var(--dur-2) both; }

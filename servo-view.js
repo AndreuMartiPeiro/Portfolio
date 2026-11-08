@@ -1494,6 +1494,29 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
   /** Escenarios de la misión con `paso` (y `bloque`): baja a donde se ve el efecto y lo resalta un momento.
    *  Los casos estudiados no lo necesitan: sus chips ya están junto a los controles que cambian. */
   let resalteTimer = null;
+  /** Marca con un borde naranja discreto el paso (o bloque) donde se ve el cambio y muestra una flecha que invita a bajar. */
+  let obsDestino = null;
+  function quitarFlecha() { const f = document.getElementById('sv-flecha'); if (f) f.remove(); if (obsDestino) { obsDestino.disconnect(); obsDestino = null; } }
+  function marcarDestino(esc) {
+    document.querySelectorAll('.servo-destino').forEach(x => x.classList.remove('servo-destino'));
+    quitarFlecha();
+    const el = esc ? document.getElementById(esc.bloque || `servo-paso-${esc.paso}`) : null;
+    if (!el) return;
+    el.classList.add('servo-destino');
+    const f = document.createElement('button');
+    f.type = 'button'; f.id = 'sv-flecha'; f.className = 'servo-flecha';
+    f.setAttribute('aria-label', `Bajar al paso ${esc.paso}, donde se ve el cambio`);
+    f.innerHTML = `<span class="servo-flecha-txt">Paso ${esc.paso}</span><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2v11M3 8.5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></svg>`;
+    f.addEventListener('click', () => { irAlPaso(esc); quitarFlecha(); });
+    document.body.appendChild(f);
+    // La flecha desaparece cuando el destino ya está a la vista
+    if ('IntersectionObserver' in window) {
+      obsDestino = new IntersectionObserver(en => { if (en.some(x => x.isIntersecting)) quitarFlecha(); }, { threshold: 0.15 });
+      obsDestino.observe(el);
+    }
+  }
+  window.addEventListener('hashchange', () => { if (!/seguimiento-leo/.test(location.hash)) quitarFlecha(); });
+
   function irAlPaso(esc) {
     const el = esc && esc.paso ? document.getElementById(esc.bloque || `servo-paso-${esc.paso}`) : null;
     if (!el) return;
@@ -1526,7 +1549,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
       if (s) {
         aplicarEscenario(s.dataset.escenario);
         const e2 = ESCENARIOS.find(x => x.id === s.dataset.escenario);
-        irPendiente = null;   // sin salto automático: el resultado se ve en la vista previa del panel
+        marcarDestino(e2 && e2.grupo === 'mision' && e2.paso ? e2 : null);   // sin salto: flecha y borde indican dónde está el cambio
         programar();
       }
     });
@@ -1546,6 +1569,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
   }
 
   window.renderServoFase = function (id, container, sub) {
+    quitarFlecha();
     if (typeof Plotly !== 'undefined') container.querySelectorAll('.js-plotly-plot').forEach(el => Plotly.purge(el));
     const fase = window.SERVO_FASES.find(f => f.id === id) || window.SERVO_FASES[0];
     if (fase.pending) { renderPendiente(fase, container); return; }
