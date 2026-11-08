@@ -148,7 +148,7 @@
     },
     servo: {
       fases: () => window.SERVO_FASES || [],
-      render: (id, el) => { if (typeof window.renderServoFase === 'function') window.renderServoFase(id, el); }
+      render: (id, el, sub) => { if (typeof window.renderServoFase === 'function') window.renderServoFase(id, el, sub); }
     }
   };
 
@@ -196,7 +196,7 @@
     const vista = VISTAS[project.view || project.id];
     if (vista) {
       const showPhase = (fase) => {
-        vista.render(fase.id, contentEl);
+        vista.render(fase.id, contentEl, subId);
         observeReveals(contentEl);
       };
       const fases = vista.fases();
