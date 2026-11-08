@@ -44,13 +44,13 @@
     sat: false, U: 10, aw: 'ninguno', der: 'error' };
 
   const ESCENARIOS = [
-    { id: 'leo', grupo: 'mision', paso: 1, lbl: 'Pasada LEO a 45°', mision: { h: 550, elMax: 45, D: 4, fGHz: 3 }, servo: {},
+    { id: 'leo', grupo: 'mision', cambia: 'Satélite a 550 km, elevación máxima de 45°, antena de 4 m a 3 GHz. Es el punto de partida.', paso: 1, lbl: 'Pasada LEO a 45°', mision: { h: 550, elMax: 45, D: 4, fGHz: 3 }, servo: {},
       texto: 'Pasada de 45° de elevación máxima a 550 km. El pedestal del caso de estudio (regulador P, Km = 6,944) sigue el acimut del satélite.',
       ref: 'Desarrollo propio, sin cifra de referencia externa.' },
-    { id: 'cenit', grupo: 'mision', paso: 1, lbl: 'Pasada casi cenital', mision: { h: 550, elMax: 85, D: 4, fGHz: 3 }, servo: {},
+    { id: 'cenit', grupo: 'mision', cambia: 'Elevación máxima de 85°: el acimut gira unas 10 veces más rápido que a 45°.', paso: 1, lbl: 'Pasada casi cenital', mision: { h: 550, elMax: 85, D: 4, fGHz: 3 }, servo: {},
       texto: 'Cerca del cenit el acimut gira muy deprisa (≈ 9 °/s frente a 0,8 °/s a 45°): es el «keyhole» de un pedestal acimut-elevación. El error del eje de acimut se dispara, pero el haz apenas se desvía porque ese error se proyecta con cos(el). Lo que de verdad limita es la velocidad y la aceleración que se piden al motor de acimut.',
       ref: 'Desarrollo propio, sin cifra de referencia externa.' },
-    { id: 'cenit-pi', grupo: 'mision', paso: 2, lbl: 'Cenital con regulador PI', mision: { h: 550, elMax: 85, D: 4, fGHz: 3 }, servo: { T: 0.005, KI: 5 },
+    { id: 'cenit-pi', grupo: 'mision', cambia: 'Pasada de 85° y acción integral en el pedestal (KI = 5): el lazo pasa a tipo 2.', paso: 2, lbl: 'Cenital con regulador PI', mision: { h: 550, elMax: 85, D: 4, fGHz: 3 }, servo: { T: 0.005, KI: 5 },
       texto: 'La misma pasada con acción integral (KI = 5): el lazo pasa a tipo 2 y sigue una rampa sin error; el error del eje de acimut baja a una séptima parte y solo queda el debido a su aceleración.',
       ref: 'Desarrollo propio: compárese con «Pasada casi cenital».' },
     // Casos estudiados: sus chips están dentro del paso donde se ve el efecto, junto a los controles que cambian.
@@ -79,14 +79,14 @@
       texto: 'Parámetros de la Práctica 3: AM de un tono de 20 Hz sobre 250 Hz con β = 0,85. Con el mensaje del enunciado (1 / −2 / 0), β·max|m| = 1,70 > 1: la meseta −2 no se recupera con el detector de envolvente.',
       mirar: 'La meseta central sale en −0,353 en vez de −2; baja β a 0,4 y se recupera.',
       ref: 'Python (P3 corregida): líneas 0,500 en 250 Hz y 0,2125 en 230/270 Hz · mesetas +1,000 / −0,353 / 0,000 (con β = 0,4: −2,000).' },
-    { id: 'tm-e7', grupo: 'mision', paso: 5, bloque: 'sv-bloque-enlace', lbl: 'Telemetría con blanco ×2', mision: { D: 4, fGHz: 3 }, servo: { T: 0.001, ref: 'rampa', omega0: 0.10 },
+    { id: 'tm-e7', grupo: 'mision', cambia: 'Blanco al doble de velocidad (0,10 rad/s) y enlace FM: el error de apuntamiento pasa a costar dB de enlace.', paso: 5, bloque: 'sv-bloque-enlace', lbl: 'Telemetría con blanco ×2', mision: { D: 4, fGHz: 3 }, servo: { T: 0.001, ref: 'rampa', omega0: 0.10 },
       tm: { mod: 'fm', kf: 80, enl: 'fm', snrRef: 20 },
       texto: 'El error del caso «Blanco al doble de velocidad» (0,10 rad/s) cuesta 3,84 dB en un trayecto. Con una SNR de referencia de 20 dB el enlace FM (β_FM = 4) está por encima del umbral; con la pérdida cae por debajo y la tasa de error se dispara: es el efecto umbral de la FM. La AM pierde lo mismo en dB, pero sin umbral tan abrupto.',
       ref: 'Desarrollo propio (modelo de libro): FM Pb 6,9·10⁻¹² → 6,3·10⁻² · AM (β = 0,85) Pb 4,7·10⁻¹¹ → 1,6·10⁻⁵.' },
-    { id: 'at-nom', grupo: 'mision', paso: 6, lbl: 'Actitud nominal', mision: { h: 500, elMax: 88 }, act: {},
+    { id: 'at-nom', grupo: 'mision', cambia: 'Satélite de 500 km con el volante de inercia por defecto (10 mN·m, 0,1 N·m·s).', paso: 6, lbl: 'Actitud nominal', mision: { h: 500, elMax: 88 }, act: {},
       texto: 'Paso 6 con el microsatélite por defecto (J = 2 kg·m², volante de 10 mN·m y 0,1 N·m·s, τd = 1 µN·m) y el PD de ωn = 0,1 rad/s y ζ = 0,7 (KP = 0,02, KD = 0,28) ante una maniobra de 30°. KP·30° = 10,47 mN·m: el par se recorta a 10 mN·m solo en la primera muestra. Pasada casi cenital a 500 km: el cuerpo tiene que girar a ≈ v/h ≈ 0,015 rad/s y el volante almacena J·ω ≈ 0,03 N·m·s, por debajo de su límite.',
       ref: 'Python: Mp 4,51 % · ts(2 %) 59,4 s · par recortado a 10 mN·m en t = 0 · pasada cenital analítica a 500 km: h = 0,0305 N·m·s, el volante aguanta.' },
-    { id: 'at-chico', grupo: 'mision', paso: 6, lbl: 'Volante sub-dimensionado', mision: { h: 500, elMax: 88 }, act: { tauMax: 2, hMax: 0.02 },
+    { id: 'at-chico', grupo: 'mision', cambia: 'El mismo satélite con un volante de 2 mN·m y 0,02 N·m·s.', paso: 6, lbl: 'Volante sub-dimensionado', mision: { h: 500, elMax: 88 }, act: { tauMax: 2, hMax: 0.02 },
       texto: 'El mismo satélite con un volante de 2 mN·m y 0,02 N·m·s. La maniobra de 30° pasa casi entera con el par saturado y el satélite no puede pasar de hmax/J = 0,01 rad/s: en la pasada cenital el volante se llena antes del cenit y la estación se pierde.',
       ref: 'Desarrollo propio: momento necesario ≈ 0,03 N·m·s frente a 0,02 (margen < 1): el volante no aguanta.' }
   ];
@@ -880,6 +880,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
         <div class="servo-chips" role="group" aria-label="Escenarios de la misión">
           ${ESCENARIOS.filter(e => e.grupo === 'mision').map(chipEscenario).join('')}
         </div>
+        <p class="servo-esc-mirar" id="sv-esc-cambia" hidden></p>
         <p class="servo-esc-texto" id="sv-esc-texto"></p>
         <p class="servo-esc-ref" id="sv-esc-ref"></p>
       </div>
@@ -1216,6 +1217,10 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     $('sv-esc-texto').textContent = !esc ? 'Configuración libre.'
       : esCaso ? `Caso estudiado «${esc.lbl}» activo en el paso ${esc.donde === 'demod' ? 5 : 2}${estado.modificado ? ' (configuración modificada)' : ''}: ningún escenario de la misión seleccionado.`
         : modif + esc.texto;
+    const cam = $('sv-esc-cambia');
+    const NOMBRE_PASO = { 1: 'Pasada orbital', 2: 'Pedestal de seguimiento', 3: 'Haz y apuntamiento', 4: 'Enlace', 5: 'Telemetría', 6: 'Actitud' };
+    cam.hidden = !(esc && !esCaso && esc.cambia);
+    if (!cam.hidden) cam.innerHTML = `<span class="servo-lbl">Qué cambia</span><span>${esc.cambia}</span><span class="servo-lbl">Dónde se ve</span><span>Paso ${esc.paso} · ${NOMBRE_PASO[esc.paso]}${esc.bloque ? ' (bloque del enlace)' : ''}</span>`;
     $('sv-esc-ref').hidden = esCaso;
     $('sv-esc-ref').textContent = esc && !esCaso ? 'Referencia · ' + esc.ref : '';
     root.querySelectorAll('[data-casos]').forEach(b => {
