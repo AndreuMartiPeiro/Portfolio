@@ -2977,6 +2977,12 @@ body.zgz-mode {
 .servo-chip.active .servo-chip-tag { color: var(--text-2); }
 .servo-esc-mirar { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2xs) var(--space-sm); font-size: var(--fs-sm); line-height: 1.6; color: var(--text); max-width: 80ch; padding-left: var(--space-sm); border-left: 1px solid var(--accent-line); }
 .servo-esc-mirar[hidden] { display: none; }
+.servo-esc-cambia { display: grid; grid-template-columns: 8.5rem 1fr; gap: var(--space-2xs) var(--space-sm); align-items: baseline; font-size: var(--fs-sm); line-height: 1.6; color: var(--text); max-width: 80ch; padding-left: var(--space-sm); border-left: 1px solid var(--accent-line); }
+.servo-esc-cambia[hidden], .servo-esc-vista[hidden] { display: none; }
+.servo-esc-cambia .servo-lbl { color: var(--accent); }
+.servo-esc-vista { display: grid; gap: var(--space-sm); }
+.servo-esc-ir { justify-self: start; }
+@media (max-width: 600px) { .servo-esc-cambia { grid-template-columns: 1fr; } }
 .servo-esc-mirar .servo-lbl { color: var(--accent); }
 
 /* Casos estudiados dentro de un paso, junto a los controles que cambian */

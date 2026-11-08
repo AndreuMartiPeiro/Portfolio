@@ -880,7 +880,12 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
         <div class="servo-chips" role="group" aria-label="Escenarios de la misión">
           ${ESCENARIOS.filter(e => e.grupo === 'mision').map(chipEscenario).join('')}
         </div>
-        <p class="servo-esc-mirar" id="sv-esc-cambia" hidden></p>
+        <div class="servo-esc-cambia" id="sv-esc-cambia" hidden></div>
+        <div class="servo-esc-vista" id="sv-esc-vista" hidden>
+          <span class="servo-lbl">Resultado en el paso</span>
+          <div class="servo-kpis" id="sv-esc-kpis"></div>
+          <button type="button" class="btn ghost servo-esc-ir" id="sv-esc-ir">Ver el paso completo</button>
+        </div>
         <p class="servo-esc-texto" id="sv-esc-texto"></p>
         <p class="servo-esc-ref" id="sv-esc-ref"></p>
       </div>
@@ -1221,6 +1226,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     const NOMBRE_PASO = { 1: 'Pasada orbital', 2: 'Pedestal de seguimiento', 3: 'Haz y apuntamiento', 4: 'Enlace', 5: 'Telemetría', 6: 'Actitud' };
     cam.hidden = !(esc && !esCaso && esc.cambia);
     if (!cam.hidden) cam.innerHTML = `<span class="servo-lbl">Qué cambia</span><span>${esc.cambia}</span><span class="servo-lbl">Dónde se ve</span><span>Paso ${esc.paso} · ${NOMBRE_PASO[esc.paso]}${esc.bloque ? ' (bloque del enlace)' : ''}</span>`;
+    $('sv-esc-vista').hidden = cam.hidden;
     $('sv-esc-ref').hidden = esCaso;
     $('sv-esc-ref').textContent = esc && !esCaso ? 'Referencia · ' + esc.ref : '';
     root.querySelectorAll('[data-casos]').forEach(b => {
@@ -1342,6 +1348,20 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     graficasPaso1(r, c); graficasPaso2(r, c); graficasPaso3(r, c); graficasPaso4(r, c);
     if (t5) { actualizarPaso5(r, t5); graficasPaso5(t5, c); }
     if (a6) graficasPaso6(a6, ap, c);
+    vistaPreviaEscenario();
+  }
+
+  /** Copia en el panel de escenarios los indicadores del paso donde se ve el efecto: no hace falta bajar para ver qué cambia. */
+  function vistaPreviaEscenario() {
+    const esc = ESCENARIOS.find(e => e.id === estado.escenario);
+    const caja = $('sv-esc-kpis'); if (!caja) return;
+    if (!esc || esc.grupo !== 'mision' || !esc.paso) { caja.innerHTML = ''; return; }
+    // Paso 6: lo que distingue los escenarios es lo que necesita la pasada (par y momento), no el diseño del PD
+    const origen = $(esc.paso === 5 && esc.bloque ? 'sv-k5e' : esc.paso === 6 ? 'sv-k6p' : `sv-k${esc.paso}`);
+    const desde = esc.paso === 6 ? 2 : 0;
+    caja.innerHTML = origen ? [...origen.children].slice(desde, desde + 4).map(k => k.outerHTML).join('') : '';
+    const ir = $('sv-esc-ir'); ir.textContent = `Ver el paso ${esc.paso} completo`;
+    ir.onclick = () => irAlPaso(esc);
   }
 
   const fmtPar = v => `${fmt(v * 1e3, 2)} mN·m`;
@@ -1506,7 +1526,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
       if (s) {
         aplicarEscenario(s.dataset.escenario);
         const e2 = ESCENARIOS.find(x => x.id === s.dataset.escenario);
-        irPendiente = e2 && e2.grupo === 'mision' && e2.paso ? e2 : null;
+        irPendiente = null;   // sin salto automático: el resultado se ve en la vista previa del panel
         programar();
       }
     });
