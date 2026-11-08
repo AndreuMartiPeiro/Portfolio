@@ -192,6 +192,7 @@
 
     // Tabs con indicador deslizante
     tabsEl.innerHTML = '<span class="section-tabs-indicator" aria-hidden="true"></span>';
+    tabsEl.style.display = '';
 
     const vista = VISTAS[project.view || project.id];
     if (vista) {
@@ -221,6 +222,8 @@
         tabsEl.appendChild(tab);
       });
       showPhase(inicial);
+      // Con una sola fase la barra de pestañas no aporta nada: se oculta
+      if (fases.length === 1) tabsEl.style.display = 'none';
       requestAnimationFrame(syncTabIndicator);
       return;
     }

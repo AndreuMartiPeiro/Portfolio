@@ -44,10 +44,10 @@
     sat: false, U: 10, aw: 'ninguno', der: 'error' };
 
   const ESCENARIOS = [
-    { id: 'leo', grupo: 'mision', lbl: 'Pasada LEO a 45°', mision: { h: 550, elMax: 45, D: 4, fGHz: 3 }, servo: {},
+    { id: 'leo', grupo: 'mision', paso: 1, lbl: 'Pasada LEO a 45°', mision: { h: 550, elMax: 45, D: 4, fGHz: 3 }, servo: {},
       texto: 'Pasada de 45° de elevación máxima a 550 km. El pedestal del caso de estudio (regulador P, Km = 6,944) sigue el acimut del satélite.',
       ref: 'Desarrollo propio, sin cifra de referencia externa.' },
-    { id: 'cenit', grupo: 'mision', lbl: 'Pasada casi cenital', mision: { h: 550, elMax: 85, D: 4, fGHz: 3 }, servo: {},
+    { id: 'cenit', grupo: 'mision', paso: 1, lbl: 'Pasada casi cenital', mision: { h: 550, elMax: 85, D: 4, fGHz: 3 }, servo: {},
       texto: 'Cerca del cenit el acimut gira muy deprisa (≈ 9 °/s frente a 0,8 °/s a 45°): es el «keyhole» de un pedestal acimut-elevación. El error del eje de acimut se dispara, pero el haz apenas se desvía porque ese error se proyecta con cos(el). Lo que de verdad limita es la velocidad y la aceleración que se piden al motor de acimut.',
       ref: 'Desarrollo propio, sin cifra de referencia externa.' },
     { id: 'cenit-pi', grupo: 'mision', paso: 2, lbl: 'Cenital con regulador PI', mision: { h: 550, elMax: 85, D: 4, fGHz: 3 }, servo: { T: 0.005, KI: 5 },
