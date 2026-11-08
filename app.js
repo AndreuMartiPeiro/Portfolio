@@ -113,7 +113,7 @@
 
       card.innerHTML = `
         <div class="project-card-media">
-          <img src="${project.image}" alt="${project.title}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'image-placeholder\\'><span class=\\'image-placeholder-icon\\'>—</span><span>Imagen del proyecto</span></div>'" />
+          <img src="${project.image}" alt="${project.title}"${project.imagePos ? ` style="object-position:${project.imagePos}"` : ''} loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'image-placeholder\\'><span class=\\'image-placeholder-icon\\'>—</span><span>Imagen del proyecto</span></div>'" />
           <span class="project-card-status${done}">${project.status}</span>
         </div>
         <div class="project-card-body">
@@ -175,7 +175,7 @@
     const tagsHTML = project.tags.map(t => `<span class="tag">${t}</span>`).join('');
     const index = PROJECTS.indexOf(project) + 1;
     const mediaHTML = project.image
-      ? `<div class="project-hero-media"><img src="${project.image}" alt="${project.title}" /></div>`
+      ? `<div class="project-hero-media"><img src="${project.image}" alt="${project.title}"${project.imagePos ? ` style="object-position:${project.imagePos}"` : ''} /></div>`
       : '';
     heroEl.innerHTML = `
       <div class="project-hero-meta">
