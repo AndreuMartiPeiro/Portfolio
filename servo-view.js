@@ -6,8 +6,10 @@
  *   Paso 2  Pedestal de seguimiento ... Práctica 1 (PID digital corregido, servo-sim.js)
  *   Paso 3  Haz y pérdida ............. Práctica 4 (diagrama del reflector) + acoplamiento propio
  *   Paso 4  Enlace .................... problema del radar (ecuación del radar) + Friis (propio)
+ *                                       + alcance frente a la frecuencia y atmósfera opcional (propio, ITU-R)
  *   Paso 5  Telemetría ................ Práctica 3 (DSB, AM, FM, demodulación, VOR; servo-telemetria.js)
- *                                       + enlace de telemetría con la pérdida del paso 3 (desarrollo propio)
+ *                                       + enlace de telemetría con la pérdida del paso 3, analógico o digital
+ *                                         (BPSK/QPSK/8-PSK/16-QAM, desarrollo propio)
  *   Paso 6  Actitud ................... desarrollo propio (doble integrador + volante saturable, servo-actitud.js)
  *                                       con el PID de la Práctica 1; requisito de la pasada del paso 1
  * Cambiar la altitud o la elevación máxima recalcula la pasada y, con ella, todos los pasos.
@@ -39,6 +41,9 @@
   const T_LIST = [0.001, 0.005, 0.01, 0.02, 0.05, 0.0625];
   const T_MIN_PASADA = 0.005;
   const Km = S ? S.PEDESTAL.Km : 6.944;
+  // Enlace digital del paso 5: tasa de bits en escala logarítmica 1-2-5 (10 kbit/s … 10 Mbit/s)
+  const RB_LIST = [1e4, 2e4, 5e4, 1e5, 2e5, 5e5, 1e6, 2e6, 5e6, 1e7];
+  const MOD_DIG = [['bpsk', 'BPSK'], ['qpsk', 'QPSK'], ['8psk', '8-PSK'], ['qam16', '16-QAM']];
 
   const SERVO_BASE = { planta: 'pedestal', T: 0.01, KP: Km, KI: 0, KD: 0, ref: 'pasada', eje: 'az', omega0: 0.05,
     sat: false, U: 10, aw: 'ninguno', der: 'error' };
@@ -55,8 +60,8 @@
       ref: 'Desarrollo propio: compárese con «Pasada casi cenital».' },
     // Casos estudiados: sus chips están dentro del paso donde se ve el efecto, junto a los controles que cambian.
     // `donde`: bloque de chips que los muestra ('pedestal' en el paso 2, 'demod' en el paso 5). `mirar`: qué observar.
-    { id: 'e1', grupo: 'caso', donde: 'pedestal', origen: 'P1', lbl: 'Ajuste del guion', servo: { planta: 'p1', T: 0.0625, KP: 4, KI: 8, KD: 1, ref: 'escalon' },
-      texto: 'Ajuste del guion de la Práctica 1 (KP = 4, KD = 1, KI = 8) ante un escalón de 10 en las unidades del guion.',
+    { id: 'e1', grupo: 'caso', donde: 'pedestal', origen: 'P1', lbl: 'Ajuste del enunciado', servo: { planta: 'p1', T: 0.0625, KP: 4, KI: 8, KD: 1, ref: 'escalon' },
+      texto: 'Ajuste del enunciado de la Práctica 1 (KP = 4, KD = 1, KI = 8) ante un escalón de 10 en las unidades del enunciado.',
       mirar: 'La sobreoscilación de la salida (casi la mitad del escalón) y el pico de u(0) = 202,5 V en la curva de control.',
       ref: 'Python: u(0) = 202,50 · pico 14,88 a 0,3125 s · Mp 48,8 % · ts(2 %) 1,625 s · ρ 0,862.' },
     { id: 'e3', grupo: 'caso', donde: 'pedestal', origen: 'P1', lbl: 'Windup con actuador saturado', servo: { planta: 'p1', T: 0.0625, KP: 4, KI: 8, KD: 1, ref: 'escalon', sat: true, U: 10 },
@@ -83,6 +88,10 @@
       tm: { mod: 'fm', kf: 80, enl: 'fm', snrRef: 20 },
       texto: 'El error del caso «Blanco al doble de velocidad» (0,10 rad/s) cuesta 3,84 dB en un trayecto. Con una SNR de referencia de 20 dB el enlace FM (β_FM = 4) está por encima del umbral; con la pérdida cae por debajo y la tasa de error se dispara: es el efecto umbral de la FM. La AM pierde lo mismo en dB, pero sin umbral tan abrupto.',
       ref: 'Desarrollo propio (modelo de libro): FM Pb 6,9·10⁻¹² → 6,3·10⁻² · AM (β = 0,85) Pb 4,7·10⁻¹¹ → 1,6·10⁻⁵.' },
+    { id: 'tm-dig', grupo: 'mision', cambia: 'Blanco al doble de velocidad y enlace digital 16-QAM a 2 Mbit/s: la pérdida de apuntamiento se come el margen sobre BER = 10⁻⁵.', paso: 5, bloque: 'sv-bloque-enlace', lbl: 'Digital con blanco ×2', mision: { D: 4, fGHz: 3 }, servo: { T: 0.001, ref: 'rampa', omega0: 0.10 },
+      tm: { enl: 'dig', dmod: 'qam16', rb: 2e6, snrRef: 20 },
+      texto: 'El mismo error de apuntamiento (3,84 dB de ida) con telemetría digital. Con γ_ref = 20 dB en 1 MHz y 2 Mbit/s, Eb/N0 baja de 17,0 a 13,2 dB: la 16-QAM, que necesita 13,4 dB para BER = 10⁻⁵, pasa de 3,6 dB de margen a quedarse sin él. Cambia a QPSK: a la misma tasa conserva 3,6 dB de margen, a cambio de ocupar el doble de banda (1,35 MHz frente a 675 kHz).',
+      ref: 'Desarrollo propio (Proakis): 16-QAM Pb 9,5·10⁻¹¹ → 1,8·10⁻⁵ · margen +3,56 → −0,28 dB · Eb/N0 requerido 13,43 dB (BPSK/QPSK 9,59 dB).' },
     { id: 'at-nom', grupo: 'mision', cambia: 'Satélite de 500 km con el volante de inercia por defecto (10 mN·m, 0,1 N·m·s).', paso: 6, lbl: 'Actitud nominal', mision: { h: 500, elMax: 88 }, act: {},
       texto: 'Paso 6 con el microsatélite por defecto (J = 2 kg·m², volante de 10 mN·m y 0,1 N·m·s, τd = 1 µN·m) y el PD de ωn = 0,1 rad/s y ζ = 0,7 (KP = 0,02, KD = 0,28) ante una maniobra de 30°. KP·30° = 10,47 mN·m: el par se recorta a 10 mN·m solo en la primera muestra. Pasada casi cenital a 500 km: el cuerpo tiene que girar a ≈ v/h ≈ 0,015 rad/s y el volante almacena J·ω ≈ 0,03 N·m·s, por debajo de su límite.',
       ref: 'Python: Mp 4,51 % · ts(2 %) 59,4 s · par recortado a 10 mN·m en t = 0 · pasada cenital analítica a 500 km: h = 0,0305 N·m·s, el volante aguanta.' },
@@ -90,7 +99,9 @@
       texto: 'El mismo satélite con un volante de 2 mN·m y 0,02 N·m·s. La maniobra de 30° pasa casi entera con el par saturado y el satélite no puede pasar de hmax/J = 0,01 rad/s: en la pasada cenital el volante se llena antes del cenit y la estación se pierde.',
       ref: 'Desarrollo propio: momento necesario ≈ 0,03 N·m·s frente a 0,02 (margen < 1): el volante no aguanta.' }
   ];
-  const TM_BASE = { mod: 'am', beta: 0.85, kf: 80, Am: 1, fm: 20, theta: 45, snrRef: 20, enl: 'am' };
+  const TM_BASE = { mod: 'am', beta: 0.85, kf: 80, Am: 1, fm: 20, theta: 45, snrRef: 20, enl: 'am', dmod: 'qpsk', rb: 1e6 };
+  const ENLACE_BASE = { PtSat: 1, atm: false, lluvia: 0 };
+  const LLUVIAS = [['0', 'Sin lluvia'], ['5', 'Moderada · 5 mm/h'], ['25', 'Fuerte · 25 mm/h'], ['50', 'Intensa · 50 mm/h']];
 
   // Paso 6 (actitud). Unidades de los controles: τmax en mN·m, τd y τm,max en µN·m, ángulos en ° y °/s.
   const T_ACT = [0.05, 0.1, 0.2, 0.5, 1];
@@ -103,7 +114,7 @@
   const estado = {
     mision: { h: 550, elMax: 45, D: 4, fGHz: 3 },
     servo: Object.assign({}, SERVO_BASE),
-    enlace: { PtSat: 1 },
+    enlace: Object.assign({}, ENLACE_BASE),
     tm: Object.assign({}, TM_BASE),
     act: Object.assign({}, ACT_BASE),
     escenario: 'leo',
@@ -133,6 +144,8 @@
     const [m, e] = x.toExponential(d).split('e');
     return m.replace('.', ',').replace('-', '−') + '·10' + String(+e).split('').map(c => SUP[c] || c).join('');
   };
+  const fmtRb = v => (v >= 1e6 ? `${fmtT(v / 1e6, 2)} Mbit/s` : `${fmtT(v / 1e3, 1)} kbit/s`);
+  const fmtHz = v => (v >= 1e6 ? `${fmtT(v / 1e6, 3)} MHz` : `${fmtT(v / 1e3, 1)} kHz`);
   const mmss = s => { const r = Math.round(s); return `${Math.floor(r / 60)} min ${String(r % 60).padStart(2, '0')} s`; };
   const ESTADO_LBL = { dentro: 'Dentro del haz', degradado: 'Degradado', fuera: 'Fuera del semihaz', na: 'No aplica' };
 
@@ -266,7 +279,19 @@
     const gan = R.ganancia(m.D, ETA, f);
     const Rmax = R.alcanceRadar({ Pt: RADAR.Pt, G: gan.G, f, sigma: RADAR.sigma, Pmin: RADAR.Pmin, LdB: RADAR.LdB });
     const hor = R.horizonte(RADAR.h1, RADAR.h2).metrica;
-    const Ref = isFinite(L.idaVuelta) ? R.alcanceEfectivo(Rmax, L.idaVuelta) : 0;
+    // Atmósfera (opcional, desactivada por defecto): en el radar y en el paso 5 se toma la elevación máxima de la
+    // pasada (la del rango mínimo); en el balance de la pasada, la elevación de cada instante.
+    const en = estado.enlace, conAtm = !!(en.atm && R.atenuacionAtmosferica);
+    const elAtm = pas ? pas.elMax : 90;
+    const atm = conAtm ? R.atenuacionAtmosferica({ fGHz: m.fGHz, elDeg: elAtm, lluvia: en.lluvia }) : null;
+    const atmIda = atm ? atm.total : 0;
+    const RefSinAtm = isFinite(L.idaVuelta) ? R.alcanceEfectivo(Rmax, L.idaVuelta) : 0;
+    const Ref = conAtm ? R.alcanceEfectivo(RefSinAtm, 2 * atmIda) : RefSinAtm;
+    const fsplMin = pas ? R.friis({ Pt: 1, f, d: pas.rangoMin }).fspl : NaN;
+    // Alcance frente a la frecuencia con el diámetro y el error actuales (1–12 GHz)
+    const errB = sim && sim.errDeg != null && isFinite(sim.errDeg) ? sim.errDeg : null;
+    const barrido = R.barridoFrecuencia ? R.barridoFrecuencia({ D: m.D, eta: ETA, errDeg: errB, radar: RADAR,
+      atm: conAtm ? { elDeg: elAtm, lluvia: en.lluvia } : null }) : null;
 
     // Telemetría a lo largo de la pasada (un solo trayecto: pérdida de ida)
     const tm = { tau: [], snr: [], snr0: [], perd: [] };
@@ -279,6 +304,7 @@
           li = perdida(sim.ep[k] * R2D, ant, hz).ida;
         } else li = L.ida;
         const base = { Pt: estado.enlace.PtSat, GtDbi: TM.GtDbi, GrDbi: gan.GdBi, f, d: g.rango[j], Tsys: TM.Tsys, B: TM.B };
+        if (conAtm) base.perdidasDb = R.atenuacionAtmosferica({ fGHz: m.fGHz, elDeg: g.el[j], lluvia: en.lluvia }).total;
         const snr0 = R.friis(base).snr;
         tm.tau.push(g.tau[j]); tm.snr0.push(snr0); tm.perd.push(li);
         tm.snr.push(isFinite(li) ? snr0 - li : null);
@@ -286,7 +312,8 @@
     }
     const snrMin = tm.snr.length ? tm.snr.reduce((mn, v) => (v == null ? -Infinity : Math.min(mn, v)), Infinity) : NaN;
     const snrMin0 = tm.snr0.length ? Math.min(...tm.snr0) : NaN;
-    return { pas, sim, hz, ant, L, clase, gan, Rmax, hor, Ref, tm, snrMin, snrMin0 };
+    return { pas, sim, hz, ant, L, clase, gan, Rmax, hor, Ref, RefSinAtm, tm, snrMin, snrMin0,
+      conAtm, atm, atmIda, elAtm, fsplMin, barrido };
   }
   /** calcular() solo depende de la misión, el servo y el enlace: los controles del paso 5 no relanzan el servo. */
   function calcularCache() {
@@ -318,12 +345,22 @@
     if (cache.demodClave !== p.beta) { cache.demod = Tm.casoDemodAM(p.beta); cache.demodClave = p.beta; }
     if (cache.vorClave !== p.theta) { cache.vor = Tm.casoVOR(p.theta, 0); cache.vorClave = p.theta; }
     // Enlace: la pérdida de ida del paso 3 (un trayecto) rebaja la SNR de referencia
-    const perdidaDb = r.L.na ? 0 : r.L.ida;
+    // (con la atmósfera activada se suma su atenuación de ida a la elevación máxima de la pasada)
+    const perdidaAp = r.L.na ? 0 : r.L.ida, perdidaDb = perdidaAp + r.atmIda;
     const betaFM = p.kf * p.Am / p.fm;
+    const digital = p.enl === 'dig' && !!Tm.enlaceDigital;
+    if (digital) {
+      const op = { snrRefDb: p.snrRef, modulacion: p.dmod, Rb: p.rb };
+      const enl = Tm.enlaceDigital(Object.assign({ perdidaDb }, op));
+      const enl0 = Tm.enlaceDigital(Object.assign({ perdidaDb: 0 }, op));
+      return { mod: cache.mod, demod: cache.demod, vor: cache.vor, enl, enl0, perdidaDb, perdidaAp, betaFM, op, digital,
+        nombre: `${enl.nombre} a ${fmtRb(p.rb)}` };
+    }
     const op = { snrRefDb: p.snrRef, modulacion: p.enl, beta: p.beta, betaFM };
     const enl = Tm.telemetria(Object.assign({ perdidaDb }, op));
     const enl0 = Tm.telemetria(Object.assign({ perdidaDb: 0 }, op));
-    return { mod: cache.mod, demod: cache.demod, vor: cache.vor, enl, enl0, perdidaDb, betaFM, op };
+    return { mod: cache.mod, demod: cache.demod, vor: cache.vor, enl, enl0, perdidaDb, perdidaAp, betaFM, op, digital,
+      nombre: p.enl.toUpperCase() };
   }
 
   // ------------------------------------------------------------------ paso 6: actitud (desarrollo propio + PID de la P1)
@@ -453,7 +490,7 @@
 
   function graficasPaso2(r, c) {
     const sim = r.sim; if (!sim) return;
-    const s = sim.s, esc = sim.angular ? R2D : 1, ud = sim.angular ? '°' : (sim.esP1 ? 'unid. del guion' : 'rad');
+    const s = sim.s, esc = sim.angular ? R2D : 1, ud = sim.angular ? '°' : (sim.esP1 ? 'unid. del enunciado' : 'rad');
     const yv = diezmar(s.t, s.y, 900, esc), rv = diezmar(s.t, s.r, 900, esc);
     dibujar('sv-c-y', [
       { x: rv.x, y: rv.y, name: 'Referencia r(t)', type: 'scatter', mode: 'lines', line: { color: c.tertiary, width: 1.5, dash: 'dash' }, hovertemplate: '%{y:.4f}<extra>r</extra>' },
@@ -517,6 +554,19 @@
       { x: r.tm.tau, y: r.tm.snr0, name: 'Sin pérdida de apuntamiento', type: 'scatter', mode: 'lines', line: { color: c.tertiary, width: 1.5, dash: 'dot' }, hovertemplate: '%{y:.2f} dB<extra>ideal</extra>' },
       { x: r.tm.tau, y: r.tm.snr, name: 'Con el error del pedestal', type: 'scatter', mode: 'lines', line: { color: c.accent, width: 2 }, connectgaps: false, hovertemplate: '%{y:.2f} dB<extra>real</extra>' }
     ], layout(c, { xaxis: eje(c, 'Tiempo desde AOS [s]'), yaxis: eje(c, 'SNR de la telemetría [dB]'), shapes: [hline(TM.snrMin, c.text2, 'dash')] }));
+
+    // Alcance del radar frente a la frecuencia con el diámetro fijo del panel y el error de seguimiento actual
+    const b = r.barrido; if (!b) return;
+    const km = v => v / 1e3, f0 = estado.mision.fGHz, conErr = b.Ref.length && r.sim && r.sim.errDeg != null && isFinite(r.sim.errDeg);
+    const tr = [{ x: b.f, y: b.Rmax.map(km), name: 'R_max (sin apuntamiento)', type: 'scatter', mode: 'lines', line: { color: c.text3, width: 1.5, dash: 'dash' }, hovertemplate: '%{y:.1f} km<extra>R_max</extra>' }];
+    if (conErr) tr.push({ x: b.f, y: b.Ref.map(km), name: 'R_ef con el error de seguimiento', type: 'scatter', mode: 'lines', line: { color: c.accent, width: 2 }, hovertemplate: '%{y:.1f} km<extra>R_ef</extra>' });
+    if (conErr && b.RefAtm) tr.push({ x: b.f, y: b.RefAtm.map(km), name: 'R_ef con atmósfera y lluvia', type: 'scatter', mode: 'lines', line: { color: c.tertiary, width: 1.5, dash: 'dot' }, hovertemplate: '%{y:.1f} km<extra>R_ef atm.</extra>' });
+    const anot = conErr && b.RefMax > 0 ? [{ x: b.fMax, y: km(b.RefMax), xref: 'x', yref: 'y', showarrow: true, arrowhead: 0, arrowcolor: c.text3, ax: 0, ay: -28, xanchor: b.fMax > 8 ? 'right' : 'center',
+      text: `máx. R_ef ${fmt(km(b.RefMax), 1)} km a ${fmt(b.fMax, 2)} GHz`, font: { family: c.fontMono, size: 10, color: c.text2 } }] : [];
+    dibujar('sv-c-frec', tr, layout(c, { hovermode: 'x unified', xaxis: eje(c, 'Frecuencia [GHz]', { range: [1, 12], dtick: 1 }),
+      yaxis: eje(c, 'Alcance [km]', { rangemode: 'tozero' }), annotations: anot,
+      shapes: [{ type: 'line', xref: 'x', yref: 'paper', x0: f0, x1: f0, y0: 0, y1: 1, line: { color: c.text2, width: 1, dash: 'dot' } }],
+      title: { text: `Antena de ${fmt(estado.mision.D, 1)} m · punteada: frecuencia actual (${fmt(f0, 1)} GHz)`, font: { size: 10, color: c.text3 }, x: 0.01, xanchor: 'left', y: 0.97 } }));
   }
 
   /** Índices de las líneas más altas (máx. n), separadas al menos `sep` Hz, ordenadas por frecuencia. */
@@ -566,7 +616,7 @@
     dibujar('sv-c-tm-d', [
       { x: td, y: Array.from(D.m), name: 'Mensaje original m(t)', type: 'scatter', mode: 'lines', line: { color: c.tertiary, width: 1.5, dash: 'dash' }, hovertemplate: '%{y:.3f}<extra>m</extra>' },
       { x: td, y: Array.from(D.correcta), name: 'Demodulado (v − 1)/β', type: 'scatter', mode: 'lines', line: { color: c.accent, width: 2 }, hovertemplate: '%{y:.3f}<extra>(v−1)/β</extra>' },
-      { x: td, y: Array.from(D.guion), name: 'Fórmula del guion 2(v − 1)/β', type: 'scatter', mode: 'lines', line: { color: c.text3, width: 1, dash: 'dot' }, hovertemplate: '%{y:.3f}<extra>guion</extra>' }
+      { x: td, y: Array.from(D.guion), name: 'Fórmula del enunciado 2(v − 1)/β', type: 'scatter', mode: 'lines', line: { color: c.text3, width: 1, dash: 'dot' }, hovertemplate: '%{y:.3f}<extra>enunciado</extra>' }
     ], layout(c, { xaxis: eje(c, 'Tiempo [s]'), yaxis: eje(c, 'Mensaje [V]'), shapes: [hline(-2, c.text3)] }));
 
     // VOR en banda base: dos tramos del espectro (DC y 30 Hz | subportadora de 9960 Hz con su banda de Carson)
@@ -599,6 +649,11 @@
       { x: tr, y: rf, name: '30 Hz variable (fase de la FM)', type: 'scatter', mode: 'lines', line: { color: c.accent, width: 2 }, hovertemplate: '%{y:.3f}<extra>var.</extra>' }
     ], layout(c, { xaxis: eje(c, 'Tiempo [s]'), yaxis: eje(c, 'Tono de 30 Hz normalizado', { range: [-1.15, 1.15] }) }));
 
+    const wBer = document.getElementById('sv-c-tm-ber'), wCon = document.getElementById('sv-c-tm-const');
+    if (wBer) wBer.closest('.servo-chart-wrap').classList.toggle('is-wide', !t5.digital);
+    if (wCon) wCon.closest('.servo-chart-wrap').hidden = !t5.digital;
+    if (t5.digital) { graficasDigital(t5, c); return; }
+
     // Enlace: tasa de error frente a la SNR de referencia, con el punto de trabajo
     const gs = [], berA = [], berF = [];
     const piso = 1e-15;
@@ -617,6 +672,40 @@
       xaxis: eje(c, 'SNR en la banda del mensaje γ [dB]', { range: [0, 40] }),
       yaxis: eje(c, 'Tasa de error de bit', { type: 'log', range: [-15, 0], exponentformat: 'power', dtick: 3 }), shapes: sh,
       title: { text: 'Punteada: γ_ref · naranja: con la pérdida del paso 3', font: { size: 10, color: c.text3 }, x: 0.01, xanchor: 'left', y: 0.97 } }));
+  }
+
+  /** Enlace digital: BER frente a Eb/N0 de las cuatro modulaciones con el punto de trabajo, y constelación con ruido. */
+  function graficasDigital(t5, c) {
+    const p = estado.tm, E = t5.enl, piso = 1e-15, xs = [];
+    for (let d = 0; d <= 20; d += 0.1) xs.push(+d.toFixed(1));
+    const curva = (m, nombre, dash) => ({ x: xs, y: xs.map(d => Math.max(piso, Tm.berDigital(m, Math.pow(10, d / 10)))), name: nombre,
+      type: 'scatter', mode: 'lines', line: { color: m === p.dmod || (m === 'bpsk' && p.dmod === 'qpsk') ? c.accent : c.text3, width: m === p.dmod || (m === 'bpsk' && p.dmod === 'qpsk') ? 2 : 1.5, dash },
+      hovertemplate: `%{y:.2e}<extra>${nombre}</extra>` });
+    const tr = [curva('bpsk', 'BPSK / QPSK', 'solid'), curva('8psk', '8-PSK (aprox.)', 'dot'), curva('qam16', '16-QAM', 'dash')];
+    const xOp = Math.min(20, Math.max(0, E.ebn0Db));
+    if (isFinite(E.ebn0Db)) tr.push({ x: [xOp], y: [Math.max(piso, E.ber)], name: 'Punto de trabajo', type: 'scatter', mode: 'markers',
+      marker: { color: c.accent, size: 9, line: { color: c.text, width: 1 } }, hovertemplate: `Eb/N0 ${fmt(E.ebn0Db, 2)} dB · %{y:.2e}<extra>trabajo</extra>` });
+    const vl = (x, col, dash) => ({ type: 'line', xref: 'x', yref: 'paper', x0: x, x1: x, y0: 0, y1: 1, line: { color: col, width: 1, dash } });
+    dibujar('sv-c-tm-ber', tr, layout(c, { hovermode: 'closest',
+      legend: { orientation: 'v', x: 0.02, xanchor: 'left', y: 0.04, yanchor: 'bottom', font: { size: 11, color: c.text2 }, bgcolor: 'transparent' },
+      xaxis: eje(c, 'Eb/N0 [dB]', { range: [0, 20] }),
+      yaxis: eje(c, 'Tasa de error de bit', { type: 'log', range: [-15, 0], exponentformat: 'power', dtick: 3 }),
+      shapes: [hline(Math.log10(E.objetivo), c.text2, 'dash'), vl(Math.min(20, E.ebn0ReqDb), c.text3, 'dot')],
+      title: { text: `Discontinua: BER = 10⁻⁵ · punteada: Eb/N0 requerido (${fmt(E.ebn0ReqDb, 2)} dB)`, font: { size: 10, color: c.text3 }, x: 0.01, xanchor: 'left', y: 0.97 } }));
+    // (en un eje logarítmico, las formas en coordenadas de datos van en log10: la línea de 10⁻⁵ está en −5)
+
+    const Mu = E.muestras, K = E.constelacion, lim = 1.8;
+    const iS = [], qS = [];
+    for (let j = 0; j < Mu.i.length; j++) { iS.push(Math.max(-lim, Math.min(lim, Mu.i[j]))); qS.push(Math.max(-lim, Math.min(lim, Mu.q[j]))); }
+    dibujar('sv-c-tm-const', [
+      { x: iS, y: qS, name: `Recibidos (${fmt(Mu.i.length)} símbolos)`, type: 'scatter', mode: 'markers', marker: { color: c.text3, size: 3, opacity: 0.55 }, hoverinfo: 'skip' },
+      { x: K.map(k => k.i), y: K.map(k => k.q), name: 'Constelación ideal (Gray)', type: 'scatter', mode: 'markers+text', text: K.map(k => k.bits),
+        textposition: 'top center', textfont: { family: c.fontMono, size: 9, color: c.text2 }, marker: { color: c.accent, size: 8 },
+        hovertemplate: '%{text}<extra>ideal</extra>' }
+    ], layout(c, { height: 300, hovermode: 'closest', showlegend: true,
+      xaxis: eje(c, 'Fase (I)', { range: [-lim, lim], zeroline: true, dtick: 0.5 }),
+      yaxis: eje(c, 'Cuadratura (Q)', { range: [-lim, lim], scaleanchor: 'x', scaleratio: 1, zeroline: true, dtick: 0.5 }),
+      title: { text: `${E.nombre} a Eb/N0 = ${fmt(E.ebn0Db, 1)} dB · Es = 1 · σ = ${fmt(Mu.sigma, 3)} por eje`, font: { size: 10, color: c.text3 }, x: 0.01, xanchor: 'left', y: 0.97 } }));
   }
 
   function graficasPaso6(a6, ap, c) {
@@ -681,9 +770,11 @@
       <span class="servo-lbl">${lbl}</span>
       <div class="servo-seg" role="group" aria-label="${lbl}">${ops.map(([v, t]) => `<button type="button" data-grupo="${grupo}"${obj ? ` data-obj="${obj}"` : ''} data-val="${v}">${t}</button>`).join('')}</div>
     </div>`;
-  const objDe = b => (b.dataset.obj === 'tm' ? estado.tm : b.dataset.obj === 'act' ? estado.act : estado.servo);
+  const objDe = b => (b.dataset.obj === 'tm' ? estado.tm : b.dataset.obj === 'act' ? estado.act : b.dataset.obj === 'enlace' ? estado.enlace : estado.servo);
   const kpi = (lbl, val, sub, cls) => `
     <div class="servo-kpi"><span class="servo-kpi-lbl">${lbl}</span><span class="servo-kpi-val${cls ? ' ' + cls : ''}">${val}</span>${sub ? `<span class="servo-kpi-sub">${sub}</span>` : ''}</div>`;
+  // Escena animada de los pasos 1–3 (servo-escena.js): lienzo + controles; vacío si el módulo no se ha cargado
+  const escena = n => (window.ServoEscena ? window.ServoEscena.plantilla(n) : '');
   const chart = (id, wide) => `<div class="servo-chart-wrap${wide ? ' is-wide' : ''}"><div class="servo-chart" id="${id}"></div></div>`;
 
   const chipEscenario = e => `<button type="button" class="servo-chip" data-escenario="${e.id}">${e.origen ? `<span class="servo-chip-tag">${e.origen}</span>` : ''}${e.lbl}</button>`;
@@ -757,7 +848,7 @@ ${tarjeta(0, '01 · Planteamiento', 'Qué estamos haciendo', `
               <li><strong>Pasada:</strong> por dónde y a qué velocidad cruza el satélite el cielo de la estación.</li>
               <li><strong>Apuntamiento:</strong> un servo con regulador PID (proporcional, integral y derivativo) mueve el pedestal de la antena para seguirlo.</li>
               <li><strong>Enlace:</strong> el error del pedestal se lleva al diagrama de la antena y se convierte en pérdida de señal.</li>
-              <li><strong>Telemetría:</strong> los datos del satélite llegan modulados en AM o FM y la pérdida rebaja su calidad.</li>
+              <li><strong>Telemetría:</strong> los datos del satélite llegan modulados en AM, FM o en digital (BPSK, QPSK, 16-QAM) y la pérdida rebaja su calidad.</li>
               <li><strong>Actitud:</strong> el satélite también tiene que girar para apuntar a la estación, con un volante de inercia que puede saturar.</li>
             </ul>`)}
 ${tarjeta(1, '02 · Estructura', 'La cadena de seis módulos', `
@@ -775,8 +866,8 @@ ${tarjeta(2, '03 · Objetivo', 'Para qué sirve estudiarlo', `
             <ul class="servo-card-lista servo-card-lista-2">
               <li><strong>Control digital:</strong> PID discreto, muestreo, estabilidad (radio espectral), saturación y windup, derivative kick.</li>
               <li><strong>Antenas:</strong> diagrama de un reflector, ancho de haz a −3 dB (HPBW, <em>half-power beamwidth</em>) y pérdida por desapuntamiento.</li>
-              <li><strong>Radar y enlace:</strong> ecuación del radar, balance de Friis, SNR y margen.</li>
-              <li><strong>Modulación:</strong> DSB, AM y FM, ancho de Carson, sobremodulación y efecto umbral de la FM.</li>
+              <li><strong>Radar y enlace:</strong> ecuación del radar, balance de Friis, SNR y margen; efecto de la frecuencia y atenuación por gases y lluvia (ITU-R).</li>
+              <li><strong>Modulación:</strong> DSB, AM y FM, ancho de Carson, sobremodulación y efecto umbral de la FM; BPSK, QPSK y 16-QAM con Eb/N0, tasa de error y constelación.</li>
               <li><strong>Actitud:</strong> doble integrador, volante de inercia saturable y descarga con magnetopares.</li>
             </ul>
             <div class="servo-card-cifras">
@@ -791,7 +882,7 @@ ${tarjeta(3, '04 · Origen', 'Qué viene de las prácticas y qué es propio', `
               <div>
                 <span class="servo-lbl">De las prácticas</span>
                 <ul class="servo-card-lista">
-                  <li><strong>Práctica 1:</strong> servomotor y PID digital (guion de S. T. Puente), en versión corregida.</li>
+                  <li><strong>Práctica 1:</strong> servomotor y PID digital (enunciado de S. T. Puente), en versión corregida.</li>
                   <li><strong>Práctica 3:</strong> modulaciones DSB, AM y FM, demodulación y VOR.</li>
                   <li><strong>Práctica 4:</strong> diagramas de radiación (M. Á. Sánchez Soriano y A. Mestre Quereda).</li>
                   <li><strong>Problema de radar:</strong> ecuación del radar y pedestal; caso de estudio de origen sin confirmar.</li>
@@ -802,18 +893,20 @@ ${tarjeta(3, '04 · Origen', 'Qué viene de las prácticas y qué es propio', `
                 <ul class="servo-card-lista">
                   <li><strong>Órbita y pasada</strong> kepleriana circular sobre la estación.</li>
                   <li><strong>Paso del error</strong> del servo a pérdida de ganancia.</li>
-                  <li><strong>Enlace de telemetría:</strong> Friis, SNR y tasa de error.</li>
+                  <li><strong>Enlace de telemetría:</strong> Friis, SNR y tasa de error, en analógico y en digital (BPSK, QPSK, 8-PSK, 16-QAM con codificación Gray).</li>
+                  <li><strong>Frecuencia y atmósfera:</strong> alcance frente a la frecuencia y atenuación por gases y lluvia (ITU-R P.676 y P.838).</li>
                   <li><strong>Actitud</strong> con volante de inercia y requisito de la pasada.</li>
                 </ul>
               </div>
             </div>
-            <p class="servo-card-nota">La plantilla del diagrama del reflector es del profesor A. Mestre Quereda y no se publica. Los motores numéricos se han contrastado con una réplica independiente en Python (29 + 19 + 16 pruebas automáticas), no con MATLAB. La implementación y la verificación se han hecho con apoyo de herramientas de programación asistida por IA. Detalle en <a href="#servo-creditos" class="link-underline">Créditos y limitaciones</a>.</p>`)}
+            <p class="servo-card-nota">La plantilla del diagrama del reflector es del profesor A. Mestre Quereda y no se publica. Los motores numéricos se han contrastado con una réplica independiente en Python (83 pruebas automáticas: 29 + 19 + 16 + 9 + 10), no con MATLAB; otras 20 comprueban que la escena animada de los pasos 1 a 3 dibuja los mismos números que las gráficas: 103 pruebas en total. La implementación y la verificación se han hecho con apoyo de herramientas de programación asistida por IA. Detalle en <a href="#servo-creditos" class="link-underline">Créditos y limitaciones</a>.</p>`)}
 ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
             <p class="servo-card-desc">Todo se calcula en el navegador al momento. Material académico de simulación: no es una herramienta operativa ni usa datos reales de ningún satélite.</p>
             <ol class="servo-card-pasos">
               <li><strong>Elige un escenario o un caso.</strong> Los <em>escenarios de la misión</em>, encima del panel, ajustan altitud, elevación o antena y recorren la cadena entera; si su efecto está en un paso concreto, la página baja hasta él. Los <em>casos estudiados</em> comprueban una pieza concreta de cada práctica y están dentro del paso donde se ve su efecto, junto a los controles que cambian (el PID y el pedestal en el paso 2, la AM sobremodulada en el paso 5); su línea «Qué mirar» dice en qué fijarse. Solo hay una configuración activa a la vez.</li>
               <li><strong>Mueve el panel de misión.</strong> Altitud, elevación máxima, diámetro y frecuencia de la antena: se recalculan los seis pasos y el resumen del panel. Sus enlaces llevan a cada paso.</li>
               <li><strong>Ajusta cada paso.</strong> Los deslizadores y botones de cada paso cambian el regulador, la referencia, la modulación o el volante.</li>
+              <li><strong>Pulsa «Simular».</strong> En los pasos 1, 2 y 3 una escena dibuja la pasada en el cielo, el pedestal girando y el satélite frente al haz en el mismo instante: el botón recorre la pasada (de 1× a 64× el tiempo real), la barra de tiempo la mueve a mano y los tres lienzos comparten reloj. Usa los mismos números que las gráficas; si el error es minúsculo, el dibujo lo amplía y lo indica.</li>
               <li><strong>Compara con la referencia.</strong> La línea <span class="servo-card-mono">Referencia · Python</span> da las cifras que obtuvo la réplica independiente en Python para ese escenario o caso; si coinciden con las de la página, el cálculo es el mismo. Al tocar un control, la configuración pasa a «modificada» y la referencia deja de aplicarse.</li>
             </ol>
             <a href="#servo-escenarios" class="btn ghost servo-card-cta">Ir a los escenarios</a>`)}
@@ -869,7 +962,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
           <span class="eyebrow"><span class="dot"></span>Fases 1 a 3 · Seguimiento, enlace, telemetría y actitud</span>
           <h2 class="section-title">Del paso del satélite al <em class="serif">margen</em> del enlace</h2>
         </div>
-        <p class="section-intro">Seis pasos encadenados: la pasada fija lo que debe seguir el pedestal, su error se convierte en pérdida con el diagrama de la antena, esa pérdida cuesta alcance y margen y rebaja la SNR de la telemetría modulada; al otro lado del enlace, el satélite tiene que girar para apuntar a la estación con un volante de inercia que puede saturar. Cambia la altitud o la elevación en el panel de misión y se recalcula todo.</p>
+        <p class="section-intro">Seis pasos encadenados: la pasada fija lo que sigue el pedestal, su error se convierte en pérdida de haz, alcance y margen de enlace, y rebaja la telemetría. Cambia el panel de misión y se recalcula todo.</p>
       </header>
 
       <div class="servo-escenarios reveal" id="servo-escenarios" style="--d: 80ms">
@@ -909,6 +1002,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
             ${cabeceraPaso(1, 'Pasada orbital', '¿Cuándo, por dónde y a qué velocidad cruza el satélite el cielo de la estación?', origen('Desarrollo propio', true))}
             <p class="servo-text">Órbita circular kepleriana (dos cuerpos, Tierra esférica en rotación, sin perturbaciones ni refracción). La órbita se coloca para que la pasada alcance la <strong>elevación máxima</strong> del panel de misión. Se comprueba con casos analíticos: periodo 2π√(a³/μ), rango mínimo igual a la altitud y velocidad angular v/h en una pasada cenital.</p>
             <div class="servo-formula">T = 2π·√(a³/μ) · ω = |ρ × ρ̇| / |ρ|² · elevación y acimut en el sistema local este-norte-cenit</div>
+            ${escena(1)}
             <div class="servo-kpis" id="sv-k1"></div>
             <div class="servo-charts">${chart('sv-c-azel')}${chart('sv-c-vel')}</div>
           </article>
@@ -935,14 +1029,16 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
               ${seg('der', 'Derivada', [['error', 'Del error'], ['salida', 'De la salida']])}
             </div>
             <p class="servo-aviso" id="sv-aviso" hidden></p>
+            ${escena(2)}
             <div class="servo-kpis" id="sv-k2"></div>
             <div class="servo-charts">${chart('sv-c-y', true)}${chart('sv-c-e')}${chart('sv-c-u')}</div>
-            <p class="servo-pie">Modelo del servomotor y algoritmo del PID digital: guion de la Práctica 1 (S. T. Puente). Pedestal: lazo Km/[s(0,1 s + 1)] del problema del radar, con ξ = 0,6. El servo de la P1 tiene la inercia de un equipo de laboratorio y no movería una antena de 4 m. Implementación y correcciones propias.</p>
+            <p class="servo-pie">Modelo del servomotor y algoritmo del PID digital: enunciado de la Práctica 1 (S. T. Puente). Pedestal: lazo Km/[s(0,1 s + 1)] del problema del radar, con ξ = 0,6. El servo de la P1 tiene la inercia de un equipo de laboratorio y no movería una antena de 4 m. Implementación y correcciones propias.</p>
           </article>
 
           <article class="servo-paso reveal" id="servo-paso-3">
             ${cabeceraPaso(3, 'Haz y pérdida de apuntamiento', '¿Cuánta señal se pierde por no apuntar exactamente al satélite?', origen('Práctica 4') + origen('Desarrollo propio', true))}
             <p class="servo-text">Diagrama de una apertura circular uniforme, [2·J₁(ka·senθ)/(ka·senθ)]², con el diámetro y la frecuencia del panel de misión. El error del paso 2 (el <strong>máximo de la pasada</strong> o el <strong>error estacionario</strong> de la rampa) se lleva al diagrama: la pérdida de ida es −10·log₁₀ P(e) y la de ida y vuelta, el doble. El semáforo compara el error con el haz: dentro si |e| ≤ θ3dB/4, degradado si |e| ≤ θ3dB/2 y fuera por encima.</p>
+            ${escena(3)}
             <div class="servo-semaforo" id="sv-sem"></div>
             <div class="servo-kpis" id="sv-k3"></div>
             <div class="servo-charts">${chart('sv-c-haz')}${chart('sv-c-perd')}</div>
@@ -953,10 +1049,18 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
             ${cabeceraPaso(4, 'Enlace', '¿Cuánto alcance y cuánto margen cuesta el error de apuntamiento?', origen('Problema de radar') + origen('Desarrollo propio', true))}
             <p class="servo-text"><strong>Radar (caso de estudio):</strong> ecuación del radar con P<sub>t</sub> = 50 kW, σ = 15 m², P<sub>min</sub> = 10⁻¹³ W, L = 6 dB y η = 0,65. El alcance va con la raíz cuarta de la potencia, así que R<sub>ef</sub> = R<sub>max</sub>·10^(−L<sub>ap</sub>/40) con la pérdida de ida y vuelta del paso 3. <strong>Telemetría del satélite:</strong> balance de Friis en un trayecto con el rango de la pasada, antena del satélite de 0 dBi, T<sub>sys</sub> = 290 K, B = 1 MHz y una SNR mínima de ${TM.snrMin} dB (valores ilustrativos).</p>
             <div class="servo-formula">R_max = [P_t·G²·λ²·σ / ((4π)³·P_min·L)]^¼ · P_r = P_t + G_t + G_r − 20·log₁₀(4πd/λ) − L_ap</div>
-            <div class="servo-controles servo-controles-1">${slider('sv-pt', 'Potencia del transmisor del satélite', 0.1, 10, 0.1)}</div>
+            <p class="servo-text"><strong>Efecto de la frecuencia.</strong> Al subir f, la pérdida en espacio libre (FSPL) crece 20·log₁₀ f, pero una antena de <strong>diámetro fijo</strong> gana f² (G = η·(πD/λ)²) y la compensa: en el enlace con la antena del satélite de 0 dBi la potencia recibida no depende de f, y el radar, que emite y recibe con la misma antena, alcanza más (R<sub>max</sub> ∝ √f). Lo que sí empeora es el <strong>apuntamiento</strong>: el haz se estrecha (θ3dB ∝ 1/f) y el mismo error de seguimiento cuesta cada vez más dB, así que el alcance efectivo tiene un máximo y luego cae. Por encima de unos GHz pesa además la <strong>atmósfera</strong>, sobre todo la lluvia.</p>
+            <div class="servo-controles">
+              ${slider('sv-pt', 'Potencia del transmisor del satélite', 0.1, 10, 0.1)}
+              <div class="servo-ctrl">
+                <label class="servo-check"><input type="checkbox" id="sv-atm" /> <span>Atmósfera y lluvia</span></label>
+                ${seg('lluvia', 'Lluvia', LLUVIAS, 'enlace')}
+              </div>
+            </div>
             <div class="servo-kpis" id="sv-k4"></div>
-            <div class="servo-charts">${chart('sv-c-enlace', true)}</div>
+            <div class="servo-charts">${chart('sv-c-enlace', true)}${chart('sv-c-frec', true)}</div>
             <p class="servo-pie" id="sv-nota4"></p>
+            <p class="servo-pie">Atmósfera (desactivada por defecto): modelo ilustrativo de desarrollo propio con fórmulas ITU-R. Gases (oxígeno y vapor de agua) con una atenuación cenital del orden de la Rec. ITU-R P.676 para atmósfera estándar a nivel del mar y la ley de la cosecante 1/sen(el), acotada a 5°; lluvia γ<sub>R</sub> = k·R<sup>α</sup> con los coeficientes de la Rec. ITU-R P.838-3 (polarización circular), altura de lluvia de 3 km y un factor de reducción simple del trayecto. En el balance de la pasada se usa la elevación de cada instante (un trayecto); en el radar y en el paso 5, la elevación máxima de la pasada (ida y vuelta en el radar).</p>
             <p class="servo-pie">Problema del radar: el origen del enunciado está sin confirmar; se presenta como caso de estudio con parámetros típicos de un radar de aproximación (TAR). El balance de Friis es desarrollo propio.</p>
           </article>
 
@@ -973,7 +1077,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     return `
           <article class="servo-paso reveal" id="servo-paso-5">
             ${cabeceraPaso(5, 'Telemetría', '¿Cómo se modula la telemetría y cuántos errores llegan con el apuntamiento real?', origen('Práctica 3') + origen('Desarrollo propio', true))}
-            <p class="servo-text">Modulaciones de la Práctica 3 en su versión corregida: un tono A<sub>m</sub>·cos(2π f<sub>m</sub> t) sobre una portadora de 250 Hz, muestreado a 1 kHz (2 kHz en FM) durante 0,5 s. El espectro es la transformada aproximada X(f) = Δt·Σ x(t<sub>n</sub>)·e<sup>−j2πft<sub>n</sub></sup> (con el factor Δt que faltaba en la entrega) y se lee como coeficientes |X|/T: un coseno de amplitud A da dos líneas de A/2.</p>
+            <p class="servo-text">Modulaciones de la Práctica 3 en su versión corregida: un tono A<sub>m</sub>·cos(2π f<sub>m</sub> t) sobre una portadora de 250 Hz, muestreado a 1 kHz (2 kHz en FM) durante 0,5 s. El espectro es la transformada aproximada X(f) = Δt·Σ x(t<sub>n</sub>)·e<sup>−j2πft<sub>n</sub></sup> (con el factor Δt de la transformada aproximada) y se lee como coeficientes |X|/T: un coseno de amplitud A da dos líneas de A/2.</p>
             <div class="servo-formula">DSB-AM m(t)·c(t) · AM [1 + β·m(t)]·c(t) · FM cos(2π f_c t + 2π k_f ∫m dt) · Δf = k_f·max|m| · β_FM = Δf/f_m · Carson 2(Δf + f_m)</div>
             <div class="servo-controles">
               ${seg('mod', 'Modulación', [['dsb', 'DSB-AM'], ['am', 'AM'], ['fm', 'FM']], 'tm')}
@@ -987,7 +1091,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
 
             <div class="servo-bloque" id="sv-bloque-demod">
               <div class="servo-bloque-head"><h4 class="servo-sub">Demodulación AM por envolvente</h4>${origen('Práctica 3')}</div>
-              <p class="servo-text">Mensaje del enunciado: 1 en el primer tercio, −2 en el segundo y 0 en el último, modulado en AM con el β de arriba. El detector de envolvente toma v = |x + j·H{x}| (transformada de Hilbert) y recupera m̂ = (v − 1)/β. La fórmula del guion, 2(v − 1)/β, devuelve 2·m.</p>
+              <p class="servo-text">Mensaje del enunciado: 1 en el primer tercio, −2 en el segundo y 0 en el último, modulado en AM con el β de arriba. El detector de envolvente toma v = |x + j·H{x}| (transformada de Hilbert) y recupera m̂ = (v − 1)/β. La fórmula del enunciado, 2(v − 1)/β, devuelve 2·m.</p>
               ${bloqueCasos('demod', 'Caso estudiado', 'Carga los parámetros de la Práctica 3 en los controles de modulación de arriba; no depende del panel de misión.')}
               <p class="servo-aviso servo-alerta" id="sv-sobremod" hidden></p>
               <div class="servo-kpis" id="sv-k5d"></div>
@@ -1007,13 +1111,15 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
             <div class="servo-bloque" id="sv-bloque-enlace">
               <div class="servo-bloque-head"><h4 class="servo-sub">Enlace de telemetría</h4>${origen('Desarrollo propio', true)}</div>
               <p class="servo-text">La pérdida de ida del paso 3 (un trayecto) rebaja la SNR de referencia γ en la banda del mensaje: γ = γ<sub>ref</sub> − L<sub>ap</sub>; el ruido no cambia. Con γ se calcula la C/N en la banda de transmisión (2W en AM, Carson en FM), el umbral del detector (C/N &lt; 10 dB), la SNR de salida y la tasa de error de datos binarios NRZ: AM con detector de envolvente, Pb = Q(d·√(γ/(1 + β²))), y FM como FSK no coherente, Pb = ½·e<sup>−Eb/2N0</sup>. Modelo de libro, ilustrativo: usa el β y el β_FM = k_f·A_m/f_m de los controles de arriba.</p>
+              <p class="servo-text"><strong>Modo digital.</strong> Un satélite real transmite la telemetría en BPSK o QPSK (estándares CCSDS) y la carga útil puede llegar a 16-QAM. γ<sub>ref</sub> se toma en una banda de referencia W<sub>ref</sub> = 1 MHz (la del balance del paso 4), de modo que E<sub>b</sub>/N<sub>0</sub> = γ<sub>ref</sub> − L<sub>ap</sub> + 10·log₁₀(W<sub>ref</sub>/R<sub>b</sub>); los datos NRZ del modelo analógico son el caso R<sub>b</sub> = 2W. Con codificación Gray, BPSK y QPSK tienen P<sub>b</sub> = Q(√(2E<sub>b</sub>/N<sub>0</sub>)) y 16-QAM P<sub>b</sub> ≈ ¾·Q(√(4E<sub>b</sub>/5N<sub>0</sub>)); 8-PSK, P<sub>b</sub> ≈ ⅔·Q(√(6·sen²(π/8)·E<sub>b</sub>/N<sub>0</sub>)) (aproximación). Filtro de coseno alzado con α = 0,35: banda R<sub>s</sub>(1 + α) y eficiencia log₂M/(1 + α).</p>
               <div class="servo-controles">
-                ${seg('enl', 'Modulación del enlace', [['am', 'AM'], ['fm', 'FM']], 'tm')}
+                ${seg('enl', 'Modulación del enlace', [['am', 'AM'], ['fm', 'FM'], ['dig', 'Digital']], 'tm')}
                 ${slider('sv-snr', 'SNR de referencia γ_ref (sin pérdida)', 0, 40, 0.5)}
+                <div class="servo-ctrl" data-grupo-wrap="dig">${seg('dmod', 'Modulación digital', MOD_DIG, 'tm')}${slider('sv-rb', 'Tasa de bits R_b', 0, RB_LIST.length - 1, 1)}</div>
               </div>
               <div class="servo-kpis" id="sv-k5e"></div>
-              <div class="servo-charts">${chart('sv-c-tm-ber', true)}</div>
-              <p class="servo-pie">Modulaciones, demodulación y VOR: enunciado de la Práctica 3 (material docente de la asignatura), implementado y corregido aquí; réplica independiente en Python. El modelo de SNR y tasa de error del enlace no sale de la P3: es desarrollo propio con fórmulas de libro (Lathi, Haykin).</p>
+              <div class="servo-charts">${chart('sv-c-tm-ber', true)}<div class="servo-chart-wrap" hidden><div class="servo-chart" id="sv-c-tm-const"></div></div></div>
+              <p class="servo-pie">Modulaciones, demodulación y VOR: base de la Práctica 3, reimplementada y corregida aquí, con réplica independiente en Python. El modelo de SNR y tasa de error del enlace analógico y el enlace digital son desarrollo propio con fórmulas de libro (Lathi, Haykin, Proakis). La nube de la constelación usa 600 símbolos con ruido gaussiano de un generador pseudoaleatorio con semilla fija: siempre las mismas muestras para los mismos parámetros.</p>
             </div>
           </article>`;
   }
@@ -1074,18 +1180,20 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
         <div class="servo-creditos-grid">
           <div class="servo-creditos-col reveal">
             <h3 class="servo-sub">Créditos</h3>
-            <p>Basado en las prácticas de <em>Control y Sistemas de Comunicación</em> (Grado en Ingeniería Aeroespacial, Universidad de Alicante, curso 2025-26). Bloque de control: guion de la Práctica 1 de S. T. Puente (modelo del servomotor y algoritmo del PID digital). Bloque de comunicaciones: Práctica 4 de M. Á. Sánchez Soriano y A. Mestre Quereda (ecuaciones de los diagramas de radiación) y Práctica 3 (modulaciones DSB, AM y FM, demodulación y VOR), cuyo enunciado es material docente de la asignatura. Los enunciados son material docente de sus autores y no se reproducen. La implementación, las correcciones del modelo, la integración radar–antena–servo–telemetría–actitud y el simulador son trabajo propio. El control de actitud (paso 6) no sale de ninguna práctica: es desarrollo propio que reutiliza el PID digital de la Práctica 1.</p>
-            <p>De la P3 se corrigen el factor Δt de la transformada aproximada (la entrega daba |X(0)| = 200 en vez de 0,02 V·s), la fórmula de la demodulación AM (el guion devuelve 2·m) y la explicación de la meseta −2 con β = 0,85: es sobremodulación, no la constante RC del detector.</p>
+            <p>Basado en las prácticas de <em>Control y Sistemas de Comunicación</em> (Grado en Ingeniería Aeroespacial, Universidad de Alicante, curso 2025-26). Bloque de control: enunciado de la Práctica 1 de S. T. Puente (modelo del servomotor y algoritmo del PID digital). Bloque de comunicaciones: Práctica 4 de M. Á. Sánchez Soriano y A. Mestre Quereda (ecuaciones de los diagramas de radiación) y Práctica 3 (modulaciones DSB, AM y FM, demodulación y VOR), Los enunciados son material docente de sus autores y no se reproducen. La implementación, las correcciones del modelo, la integración radar–antena–servo–telemetría–actitud y el simulador son trabajo propio. El control de actitud (paso 6) no sale de ninguna práctica: es desarrollo propio que reutiliza el PID digital de la Práctica 1. También son desarrollo propio, con fórmulas de libro (Proakis, Lathi, Haykin) y de las recomendaciones ITU-R P.676 y P.838, el enlace digital del paso 5 (BPSK, QPSK, 8-PSK y 16-QAM) y la atenuación atmosférica y el barrido en frecuencia del paso 4.</p>
+            <p>De la P3 se corrigen el factor Δt de la transformada aproximada (la versión original daba |X(0)| = 200 en vez de 0,02 V·s), la fórmula de la demodulación AM (el enunciado devuelve 2·m) y la explicación de la meseta −2 con β = 0,85: es sobremodulación, no la constante RC del detector.</p>
             <p>La plantilla <code>plano_E_reflector.m</code> es del profesor A. Mestre Quereda: no se publica ni se reescribe. El diagrama del reflector parte de la función de análisis propia de la P4 y de la ecuación del enunciado.</p>
             <h3 class="servo-sub">Limitaciones</h3>
             <ul class="servo-lista">
-              <li><strong>Validación:</strong> el motor numérico se ha comparado con una réplica independiente en Python (scipy) mediante 29 pruebas automáticas, el de telemetría (FFT, AM/FM, demodulación, VOR) con otras 19 y el de actitud con 16 más. No se ha contrastado con MATLAB.</li>
+              <li><strong>Validación:</strong> el motor numérico se ha comparado con una réplica independiente en Python (scipy) mediante 29 pruebas automáticas, el de telemetría (FFT, AM/FM, demodulación, VOR) con otras 19, el de actitud con 16, la modulación digital con 9 y la atmósfera y el barrido en frecuencia con 10: 83 frente a Python. Otras 20 comprueban la geometría de la escena animada de los pasos 1 a 3 (proyección del cielo, vista lateral, cono del haz) y que reproduce instante a instante la desviación, el semáforo y la pérdida de la página: 103 pruebas automáticas en total. No se ha contrastado con MATLAB.</li>
               <li><strong>Actitud:</strong> un solo eje, cuerpo rígido y sin acoplamiento giroscópico entre ejes ni dinámica del motor del volante; τd constante (en realidad el gradiente gravitatorio depende de la orientación y el arrastre de la densidad); magnetopares siempre disponibles con el par pedido, sin depender de la dirección del campo magnético a lo largo de la órbita. El requisito de la pasada supone que el cuerpo gira con la línea de vista que ve la estación y que el volante empieza vacío. Los parámetros del microsatélite (J, volante, τd, magnetopares, T = 0,1 s) son valores típicos elegidos como supuestos propios. Sin validación en MATLAB: solo la réplica en Python y casos analíticos.</li>
-              <li><strong>Telemetría:</strong> la P3 se simula en banda base y a las frecuencias del guion (portadora de 250 Hz), no en RF. El VOR en RF (114,65 MHz muestreado a 250 MHz) solo se documenta: no se simula. El modelo de SNR y tasa de error del enlace es desarrollo propio, de libro e ilustrativo (sin codificación, sin sincronización, ruido blanco gaussiano y pérdida de apuntamiento estática).</li>
+              <li><strong>Telemetría:</strong> la P3 se simula en banda base y a las frecuencias del enunciado (portadora de 250 Hz), no en RF. El VOR en RF (114,65 MHz muestreado a 250 MHz) solo se documenta: no se simula. El modelo de SNR y tasa de error del enlace es desarrollo propio, de libro e ilustrativo (sin codificación, sin sincronización, ruido blanco gaussiano y pérdida de apuntamiento estática).</li>
+              <li><strong>Modulación digital:</strong> desarrollo propio con las fórmulas de Proakis y Haykin para BPSK, QPSK y 16-QAM con codificación Gray (exactas en BPSK/QPSK; la de 16-QAM es la habitual de SNR alta y la de 8-PSK, la aproximación de vecinos más próximos). Detección coherente ideal, sin codificación de canal, sin errores de sincronismo ni ruido de fase; γ<sub>ref</sub> se refiere a una banda de 1 MHz. La constelación es una nube de 600 símbolos con semilla fija, no una estimación de la tasa de error.</li>
+              <li><strong>Atmósfera:</strong> desarrollo propio con valores de las Rec. ITU-R P.676 (gases, como tabla cenital de atmósfera estándar a nivel del mar) y P.838-3 (lluvia, polarización circular), ley de la cosecante acotada a 5°, altura de lluvia fija de 3 km y factor de reducción simple; sin estadística de tasas de lluvia (P.837), centelleo ni nubes. Es ilustrativo y está desactivado por defecto.</li>
               <li><strong>Problema del radar:</strong> el origen del enunciado está sin confirmar; se usa como caso de estudio.</li>
               <li><strong>Órbita:</strong> kepleriana circular, sin J2, arrastre ni refracción; Tierra esférica.</li>
               <li><strong>Seguimiento:</strong> un solo eje del pedestal frente a la referencia, con el otro eje supuesto perfecto (en acimut, la desviación del haz es la del eje proyectada con cos(el)); sin monopulso ni barrido cónico ni límites de velocidad del motor; pérdida estática por desapuntamiento.</li>
-              <li><strong>Supuestos no fijados por el enunciado:</strong> U = 10 V y la onda cuadrada de 12,5 s de periodo. El guion da 0,01 s como periodo de la planta (§4.6), pero solo 0,0625 s reproduce sus figuras 20–22: se usa 0,0625 s, supuesto propio.</li>
+              <li><strong>Supuestos no fijados por el enunciado:</strong> U = 10 V y la onda cuadrada de 12,5 s de periodo. El enunciado da 0,01 s como periodo de la planta (§4.6), pero solo 0,0625 s reproduce sus figuras 20–22: se usa 0,0625 s, supuesto propio.</li>
               <li><strong>Herramientas:</strong> implementación y verificación numérica realizadas con apoyo de herramientas de programación asistida por IA.</li>
             </ul>
           </div>
@@ -1111,10 +1219,13 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     const ess = Math.abs(sr.e[sr.N - 1]) * R2D;
     const L = R.perdidaApuntamiento(ess, { a: 2, f: 3e9 });
     const filas = [
-      ['u(0), guion P1', '202,50 V', fmt(m1.u0, 2) + ' V'],
-      ['Sobreoscilación, guion P1', '48,8 %', fmt(m1.sobreosc, 1) + ' %'],
-      ['ρ del lazo, guion P1', '0,862', fmt(S.radioEspectral(p1, 4, 8, 1, S.P1.T), 3)],
+      ['u(0), enunciado P1', '202,50 V', fmt(m1.u0, 2) + ' V'],
+      ['Sobreoscilación, enunciado P1', '48,8 %', fmt(m1.sobreosc, 1) + ' %'],
+      ['ρ del lazo, enunciado P1', '0,862', fmt(S.radioEspectral(p1, 4, 8, 1, S.P1.T), 3)],
+      ['Ajustes de la memoria P1 (KP/KD/KI 5/2,5/6 y 6/3/5): Mp', '56,8 % · 70,9 %', [[5, 2.5, 6], [6, 3, 5]].map(([kp, kd, ki]) =>
+        fmt(S.metricas(S.simular({ planta: p1, T: S.P1.T, KP: kp, KI: ki, KD: kd, ref: S.escalon(400, 10) }).y, null, 10, S.P1.T).sobreosc, 1) + ' %').join(' · ')],
       ['θ3dB, antena de 4 m a 3 GHz', '1,474°', fmt(R.haz({ a: 2, f: 3e9 }).hpbw, 3) + '°'],
+      ['Directividad del reflector P4 (41253/θE·θH)', '31,42 dBi', fmt(10 * Math.log10(41253 / (R.haz({ a: 0.18, f: 9e9, plano: 'E' }).hpbw * R.haz({ a: 0.18, f: 9e9, plano: 'H' }).hpbw)), 2) + ' dBi'],
       ['R_max del radar', '177,84 km', fmt(Rm / 1e3, 2) + ' km'],
       ['e_ss del pedestal (0,05 rad/s)', '0,4125°', fmt(ess, 4) + '°'],
       ['Pérdida de ida y vuelta', '1,81 dB', fmt(L.idaVuelta, 2) + ' dB'],
@@ -1130,6 +1241,24 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
         ['Meseta −2 demodulada, β = 0,4', '−2,000', fmt(d2.mesetas.correcta[1], 3)],
         ['VOR: ancho de Carson', '1.020 Hz', fmt(v.carson) + ' Hz'],
         ['VOR: rumbo recuperado (θ = 45°)', '45,00°', fmt(v.rumbo, 2) + '°']);
+      if (Tm.enlaceDigital) {
+        const q16 = Tm.enlaceDigital({ perdidaDb: 3.84, snrRefDb: 20, modulacion: 'qam16', Rb: 2e6, nMuestras: 1 });
+        filas.push(
+          ['BPSK/QPSK: Eb/N0 para BER = 10⁻⁵', '9,59 dB', fmt(Tm.ebn0Requerido('qpsk'), 2) + ' dB'],
+          ['16-QAM: Eb/N0 para BER = 10⁻⁵', '13,43 dB', fmt(Tm.ebn0Requerido('qam16'), 2) + ' dB'],
+          ['BER a Eb/N0 = 10 dB: QPSK · 16-QAM', '3,9·10⁻⁶ · 0,00175', `${fmtSci(Tm.berDigital('qpsk', 10), 1)} · ${fmtSci(Tm.berDigital('qam16', 10), 1)}`],
+          ['16-QAM a 2 Mbit/s, γ_ref 20 dB, pérdida 3,84 dB: margen', '−0,28 dB', fmt(q16.margenDb, 2) + ' dB']);
+      }
+    }
+    if (R.barridoFrecuencia) {
+      const b = R.barridoFrecuencia({ D: 4, eta: ETA, errDeg: 0.4125, radar: RADAR });
+      const i4 = b.f.findIndex(x => Math.abs(x - 4) < 1e-9), i12 = b.f.findIndex(x => Math.abs(x - 12) < 1e-9);
+      const ba = R.barridoFrecuencia({ D: 4, eta: ETA, errDeg: 0.4125, radar: RADAR, fGHz: [8], atm: { elDeg: 45, lluvia: 25 } });
+      filas.push(
+        ['R_ef frente a f (4 m, 0,4125°): máximo', '171,37 km a 4,5 GHz', `${fmt(b.RefMax / 1e3, 2)} km a ${fmt(b.fMax, 1)} GHz`],
+        ['R_ef a 4 GHz y a 12 GHz', '170,20 km · 17,22 km', `${fmt(b.Ref[i4] / 1e3, 2)} km · ${fmt(b.Ref[i12] / 1e3, 2)} km`],
+        ['Lluvia de 25 mm/h a 12 GHz, 45°: atenuación de ida', '3,72 dB', fmt(R.atenuacionAtmosferica({ fGHz: 12, elDeg: 45, lluvia: 25 }).lluvia, 2) + ' dB'],
+        ['R_ef a 8 GHz sin y con 25 mm/h (45°)', '124,58 · 106,86 km', `${fmt(b.Ref[b.f.findIndex(x => Math.abs(x - 8) < 1e-9)] / 1e3, 2)} · ${fmt(ba.RefAtm[0] / 1e3, 2)} km`]);
     }
     if (At) {
       const Q = At.SAT, d = At.disenoPD(Q.J, Q.wn, Q.zeta), paso = 30 * D2R;
@@ -1171,6 +1300,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     'sv-fm': { get: () => estado.tm.fm, set: v => { estado.tm.fm = v; }, txt: v => `${fmt(v)} Hz` },
     'sv-theta': { get: () => estado.tm.theta, set: v => { estado.tm.theta = v; }, txt: v => `${fmt(v)}°` },
     'sv-snr': { get: () => estado.tm.snrRef, set: v => { estado.tm.snrRef = v; }, txt: v => `${fmt(v, 1)} dB` },
+    'sv-rb': { get: () => RB_LIST.indexOf(estado.tm.rb), set: v => { estado.tm.rb = RB_LIST[v]; }, txt: v => fmtRb(RB_LIST[v]) },
     'sv-at-wn': { get: () => estado.act.wn, set: v => { estado.act.wn = v; }, txt: v => `${fmtT(v, 3)} rad/s` },
     'sv-at-z': { get: () => estado.act.zeta, set: v => { estado.act.zeta = v; }, txt: v => fmtT(v, 3) },
     'sv-at-kp': { get: () => estado.act.KP, set: v => { estado.act.KP = v; }, txt: v => `${fmtT(v, 4)} N·m/rad` },
@@ -1204,6 +1334,11 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     root.querySelector('[data-grupo-wrap="omega0"]').hidden = sv.ref !== 'rampa';
     const wkf = root.querySelector('[data-grupo-wrap="kf"]');
     if (wkf) wkf.hidden = estado.tm.mod !== 'fm' && estado.tm.enl !== 'fm';
+    const wdig = root.querySelector('[data-grupo-wrap="dig"]');
+    if (wdig) wdig.hidden = estado.tm.enl !== 'dig';
+    const wll = root.querySelector('[data-grupo-wrap="lluvia"]');
+    if (wll) wll.hidden = !estado.enlace.atm;
+    if ($('sv-atm')) $('sv-atm').checked = estado.enlace.atm;
     $('sv-sat').checked = sv.sat;
     if (At && $('sv-at-des')) {
       const a = estado.act, w = n => root.querySelector(`[data-grupo-wrap="${n}"]`);
@@ -1245,6 +1380,8 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     estado.servo = Object.assign({}, SERVO_BASE, e.servo);
     estado.tm = Object.assign({}, TM_BASE, e.tm);
     estado.act = Object.assign({}, ACT_BASE, e.act);
+    // Las cifras de referencia de los escenarios son sin atmósfera: se desactiva (la potencia del satélite se conserva)
+    estado.enlace.atm = ENLACE_BASE.atm; estado.enlace.lluvia = ENLACE_BASE.lluvia;
     if (e.mision) Object.assign(estado.mision, e.mision);
   }
 
@@ -1299,7 +1436,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     // Paso 3
     const hz = r.hz, L = r.L, err = sim ? sim.errDeg : null;
     const semTxt = r.clase === 'na'
-      ? 'Esta referencia es una prueba del guion: no define un error de apuntamiento. Elige «Pasada» o «Rampa» para llevar el error al haz.'
+      ? 'Esta referencia es una prueba del enunciado: no define un error de apuntamiento. Elige «Pasada» o «Rampa» para llevar el error al haz.'
       : `${ESTADO_LBL[r.clase]} · error de ${fmt(err, 3)}° frente a θ3dB/4 = ${fmt(hz.hpbw / 4, 3)}° y θ3dB/2 = ${fmt(hz.hpbw / 2, 3)}°`;
     $('sv-sem').innerHTML = `<span class="servo-dot is-${r.clase}" aria-hidden="true"></span><span>${semTxt}</span>`;
     const perdTxt = v => (L.na ? '—' : isFinite(v) ? `${fmt(v, 2)} dB` : 'sin señal');
@@ -1312,16 +1449,25 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     ].join('');
 
     // Paso 4
+    const refSub = L.na ? 'sin error de apuntamiento definido'
+      : r.conAtm ? `−${fmt(100 * (1 - r.Ref / r.Rmax), 1)} % · sin atmósfera ${fmt(r.RefSinAtm / 1e3, 2)} km`
+        : (100 * (1 - r.Ref / r.Rmax) < 0.05 ? 'sin pérdida por apuntamiento' : `−${fmt(100 * (1 - r.Ref / r.Rmax), 1)} % por apuntamiento`);
     $('sv-k4').innerHTML = [
-      kpi('Ganancia de la antena', `${fmt(r.gan.GdBi, 2)} dBi`, `A_ef = ${fmt(r.gan.Aef, 3)} m²`),
+      kpi('Ganancia de la antena', `${fmt(r.gan.GdBi, 2)} dBi`, `A_ef = ${fmt(r.gan.Aef, 3)} m² · diámetro fijo: sube 20·log f`),
+      kpi('Pérdida en espacio libre (FSPL)', isFinite(r.fsplMin) ? `${fmt(r.fsplMin, 2)} dB` : '—', pas ? `al rango mínimo (${fmt(pas.rangoMin / 1e3)} km) · sube 20·log f` : 'sin pasada'),
       kpi('R_max del radar', `${fmt(r.Rmax / 1e3, 2)} km`, `horizonte (30 m / 3000 m): ${fmt(r.hor, 2)} km`),
-      kpi('Alcance efectivo', L.na ? '—' : `${fmt(r.Ref / 1e3, 2)} km`, L.na ? 'sin error de apuntamiento definido' : (100 * (1 - r.Ref / r.Rmax) < 0.05 ? 'sin pérdida por apuntamiento' : `−${fmt(100 * (1 - r.Ref / r.Rmax), 1)} % por apuntamiento`), 'is-key'),
+      kpi('Alcance efectivo', L.na ? '—' : `${fmt(r.Ref / 1e3, 2)} km`, refSub, 'is-key')
+    ].concat(r.conAtm ? [
+      kpi('Atenuación atmosférica (ida)', `${fmt(r.atmIda, 2)} dB`, `a ${fmt(r.elAtm, 0)}° · gases ${fmt(r.atm.gases, 3)} + lluvia ${fmt(r.atm.lluvia, 2)} dB`)
+    ] : []).concat([
       kpi('SNR mínima de la pasada', isFinite(r.snrMin) ? `${fmt(r.snrMin, 1)} dB` : 'sin señal',
         sv.ref === 'pasada' && isFinite(r.snrMin) && r.L.ida > 0.5 && r.snrMin0 - r.snrMin < 0.5
           ? `ideal: ${fmt(r.snrMin0, 1)} dB · el mínimo cae en el borde de la pasada, lejos del cenit donde el error es máximo`
           : `ideal: ${fmt(r.snrMin0, 1)} dB`),
       kpi('Margen mínimo', isFinite(r.snrMin) ? `${fmt(r.snrMin - TM.snrMin, 1)} dB` : '—', `sobre ${TM.snrMin} dB de SNR · P_t = ${fmt(estado.enlace.PtSat, 1)} W`)
-    ].concat(t5 ? [kpi('Tasa de error (paso 5)', fmtBer(t5.enl.ber), `${t5.op.modulacion.toUpperCase()} · γ = ${fmtDb(t5.enl.gammaDb)}${t5.enl.bajoUmbral ? ' · bajo umbral' : ''}`)] : []).join('');
+    ]).concat(t5 ? [kpi('Tasa de error (paso 5)', fmtBer(t5.enl.ber), t5.digital
+      ? `${t5.nombre} · Eb/N0 = ${fmtDb(t5.enl.ebn0Db)}${t5.enl.bajoUmbral ? ' · sin margen' : ''}`
+      : `${t5.nombre} · γ = ${fmtDb(t5.enl.gammaDb)}${t5.enl.bajoUmbral ? ' · bajo umbral' : ''}`)] : []).join('');
     $('sv-nota4').textContent = pas
       ? `El satélite nunca se acerca a menos de ${fmt(pas.rangoMin / 1e3)} km: queda fuera del alcance del radar del caso de estudio (${fmt(r.Rmax / 1e3)} km). Para el satélite lo que cuenta es el enlace de telemetría; el radar muestra cuánto alcance cuesta el mismo error.`
       : '';
@@ -1339,7 +1485,7 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
       ['Alcance efectivo radar', `<span class="servo-key">${L.na ? '—' : fmt(r.Ref / 1e3, 2) + ' km'}</span>`],
       ['Margen de telemetría', isFinite(r.snrMin) ? `${fmt(r.snrMin - TM.snrMin, 1)} dB` : '—']
     ].concat(t5 ? [
-      ['SNR telemetría γ', fmtDb(t5.enl.gammaDb)],
+      t5.digital ? ['Eb/N0 telemetría', fmtDb(t5.enl.ebn0Db)] : ['SNR telemetría γ', fmtDb(t5.enl.gammaDb)],
       ['Tasa de error', fmtBer(t5.enl.ber)]
     ] : []).concat(ap ? [
       ['Volante en la pasada', `<span class="servo-dot is-${ap.rq.ok ? 'dentro' : 'fuera'}" aria-hidden="true"></span>${ap.rq.ok ? 'Aguanta' : 'No aguanta'}`]
@@ -1348,6 +1494,9 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     graficasPaso1(r, c); graficasPaso2(r, c); graficasPaso3(r, c); graficasPaso4(r, c);
     if (t5) { actualizarPaso5(r, t5); graficasPaso5(t5, c); }
     if (a6) graficasPaso6(a6, ap, c);
+    // Escena animada de los pasos 1–3: mismos datos (pasada, servo, haz y pérdida), sin cálculo nuevo
+    if (window.ServoEscena) window.ServoEscena.actualizar({ pas, sim, hz: r.hz, L: r.L, ref: sv.ref, eje: sv.eje,
+      hKm: estado.mision.h, perdida: e => perdida(e, r.ant, r.hz), clasificar: R.clasificarApuntamiento });
     vistaPreviaEscenario();
   }
 
@@ -1454,8 +1603,8 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     }
     $('sv-k5d').innerHTML = [
       kpi('Índice β·max|m|', fmt(D.indice, 2), so ? 'sobremodulada (> 1)' : 'sin sobremodulación', so ? 'is-key' : ''),
-      kpi('Meseta +1', fmt(mes.correcta[0], 3), `guion: ${fmt(mes.guion[0], 3)}`),
-      kpi('Meseta −2', fmt(mes.correcta[1], 3), `guion: ${fmt(mes.guion[1], 3)} · ${so ? 'no se recupera' : 'recuperada'}`, so ? 'is-key' : ''),
+      kpi('Meseta +1', fmt(mes.correcta[0], 3), `enunciado: ${fmt(mes.guion[0], 3)}`),
+      kpi('Meseta −2', fmt(mes.correcta[1], 3), `enunciado: ${fmt(mes.guion[1], 3)} · ${so ? 'no se recupera' : 'recuperada'}`, so ? 'is-key' : ''),
       kpi('Meseta 0', fmt(mes.correcta[2], 3), `mín. de 1 + β·m: ${fmt(D.minEnvolvente, 3)}`)
     ].join('');
 
@@ -1470,9 +1619,25 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     ].join('');
 
     // Enlace de telemetría
-    const conPerdida = !r.L.na;
+    const conPerdida = !r.L.na || r.conAtm;
+    const perdSub = (!r.L.na ? (estado.servo.ref === 'pasada' ? 'máximo de la pasada' : 'error estacionario') : 'sin error de apuntamiento definido')
+      + (r.conAtm ? ` · incluye ${fmt(r.atmIda, 2)} dB de atmósfera` : '');
+    const kPerd = kpi(r.conAtm ? 'Pérdida de ida (paso 3 + atmósfera)' : 'Pérdida de ida (paso 3)', conPerdida ? (isFinite(t5.perdidaDb) ? `${fmt(t5.perdidaDb, 2)} dB` : 'sin señal') : '—', perdSub);
+    if (t5.digital) {
+      const ok = E.margenDb >= 0;
+      $('sv-k5e').innerHTML = [
+        kPerd,
+        kpi('Eb/N0', fmtDb(E.ebn0Db), `γ = ${fmtDb(E.gammaDb)} en 1 MHz · R_b = ${fmtRb(E.Rb)}`),
+        kpi('Tasa de error', fmtBer(E.ber), `${E.nombre}${E.M === 8 ? ' (aprox.)' : ''} · sin pérdida: ${fmtBer(t5.enl0.ber)}`, 'is-key'),
+        kpi('Margen sobre BER 10⁻⁵', isFinite(E.margenDb) ? `${E.margenDb > 0 ? '+' : ''}${fmt(E.margenDb, 2)} dB` : 'sin señal', `requiere Eb/N0 = ${fmt(E.ebn0ReqDb, 2)} dB${ok ? '' : ' · no se cumple'}`, ok ? '' : 'is-key'),
+        kpi('Eficiencia espectral', `${fmt(E.eficiencia, 2)} bit/s/Hz`, `log₂${E.M}/(1 + α) · α = ${fmt(E.rollOff, 2)}`),
+        kpi('Ancho de banda ocupado', fmtHz(E.anchoBanda), `R_s(1 + α) · R_s = ${fmtHz(E.Rs).replace('Hz', 'Bd')}`),
+        kpi('Alcance efectivo (paso 4)', r.L.na ? '—' : `${fmt(r.Ref / 1e3, 2)} km`, 'radar, ida y vuelta')
+      ].join('');
+      return;
+    }
     $('sv-k5e').innerHTML = [
-      kpi('Pérdida de ida (paso 3)', conPerdida ? (isFinite(t5.perdidaDb) ? `${fmt(t5.perdidaDb, 2)} dB` : 'sin señal') : '—', conPerdida ? (estado.servo.ref === 'pasada' ? 'máximo de la pasada' : 'error estacionario') : 'sin error de apuntamiento definido'),
+      kPerd,
       kpi('Alcance efectivo (paso 4)', r.L.na ? '—' : `${fmt(r.Ref / 1e3, 2)} km`, 'radar, ida y vuelta'),
       kpi('SNR del enlace γ', fmtDb(E.gammaDb), `referencia ${fmt(p.snrRef, 1)} dB`),
       kpi('C/N en la banda', fmtDb(E.cnrDb), `B_T = ${fmt(E.bTsobreW, 1)}·W · umbral γ = ${fmt(E.umbralGammaDb, 1)} dB`),
@@ -1537,12 +1702,13 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
     root.addEventListener('change', e => {
       if (e.target.id === 'sv-sat') { estado.servo.sat = e.target.checked; estado.modificado = true; programar(); }
       if (e.target.id === 'sv-at-des') { estado.act.des = e.target.checked; estado.modificado = true; programar(); }
+      if (e.target.id === 'sv-atm') { estado.enlace.atm = e.target.checked; estado.modificado = true; programar(); }
     });
     root.addEventListener('click', e => {
       const b = e.target.closest('[data-grupo]');
       if (b) {
         const v = b.dataset.val;
-        objDe(b)[b.dataset.grupo] = b.dataset.obj === 'act' && /^\d+(\.\d+)?$/.test(v) ? +v : v;
+        objDe(b)[b.dataset.grupo] = (b.dataset.obj === 'act' || b.dataset.obj === 'enlace') && /^\d+(\.\d+)?$/.test(v) ? +v : v;
         estado.modificado = true; programar(); return;
       }
       const s = e.target.closest('[data-escenario]');
@@ -1577,10 +1743,14 @@ ${tarjeta(4, '05 · Guía', 'Cómo usarlo', `
       container.innerHTML = '<p class="servo-text">No se ha podido cargar el motor numérico (servo-sim.js / servo-radar.js).</p>';
       return;
     }
+    // Depuración / capturas: ?escenario=<id> carga un escenario o caso al abrir la vista
+    const mEsc = /[?&]escenario=([\w-]+)/.exec(window.location.search);
+    if (mEsc && ESCENARIOS.some(e => e.id === mEsc[1])) aplicarEscenario(mEsc[1]);
     container.innerHTML = plantilla();
     const root = container.querySelector('.servo-view');
     conectar(root);
     conectarCarrusel(root);
+    if (window.ServoEscena) window.ServoEscena.conectar(root);
     tablaValidacion();
     actualizar();
     const alias = { telemetria: 5, actitud: 6 }[sub];

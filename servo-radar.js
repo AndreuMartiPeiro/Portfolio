@@ -18,6 +18,8 @@
  *       aproximación habitual L = 12,04·(e/θ3dB)² dB por trayecto, que con los mismos datos da 1,89 dB.
  *   (c) ENLACE: ecuación del radar (alcance máximo, horizonte con k = 4/3, alcance efectivo con pérdida de
  *       apuntamiento) y balance de enlace de Friis para la telemetría del satélite.
+ *   (d) ATMÓSFERA (desarrollo propio, opcional): gases (P.676, tabla cenital + cosecante) y lluvia (P.838 + longitud
+ *       efectiva con reducción simple); barrido del alcance frente a la frecuencia con antena de diámetro fijo.
  *
  * Constantes: c = 3e8 m/s, como en las prácticas y en radar_corregido.py (así λ = 0,100 m exactos a 3 GHz).
  * Unidades: SI en la entrada (m, s, Hz, W, rad) salvo que el nombre diga «Deg»/«dB»; ángulos de salida en grados.
@@ -318,7 +320,116 @@
     return out;
   }
 
+  // =========================================================================== (d) atmósfera (desarrollo propio, ITU-R)
+  /**
+   * Atenuación cenital por gases (O2 + vapor de agua) [dB] en atmósfera estándar a nivel del mar (ρ ≈ 7,5 g/m³),
+   * del orden de los valores de la Rec. ITU-R P.676. Tabla de trabajo redondeada, interpolada linealmente en f;
+   * fuera de [1, 30] GHz se toma el valor del extremo. El máximo local de 22,2 GHz es la raya del vapor de agua.
+   */
+  const GAS_CENIT = [[1, 0.035], [2, 0.040], [4, 0.050], [6, 0.058], [8, 0.070], [10, 0.088], [12, 0.110],
+    [15, 0.150], [18, 0.260], [20, 0.380], [22.2, 0.500], [25, 0.380], [28, 0.330], [30, 0.330]];
+
+  /**
+   * Coeficientes de la Rec. ITU-R P.838-3 (lluvia): [f GHz, kH, αH, kV, αV].
+   * La polarización circular usa k = (kH + kV)/2 y α = (kH·αH + kV·αV)/(2k) (P.838, τ = 45°).
+   */
+  const P838 = [
+    [1, 0.0000259, 0.9691, 0.0000308, 0.8592],
+    [2, 0.0000847, 1.0664, 0.0000998, 0.9490],
+    [3, 0.0001390, 1.2322, 0.0001942, 1.0688],
+    [4, 0.0001071, 1.6009, 0.0002461, 1.2476],
+    [5, 0.0002162, 1.6969, 0.0002428, 1.5317],
+    [6, 0.0007056, 1.5900, 0.0004878, 1.5728],
+    [7, 0.001915, 1.4810, 0.001425, 1.4745],
+    [8, 0.004115, 1.3905, 0.003450, 1.3797],
+    [10, 0.01217, 1.2571, 0.01129, 1.2156],
+    [12, 0.02386, 1.1825, 0.02455, 1.1216],
+    [15, 0.04481, 1.1233, 0.05008, 1.0440],
+    [20, 0.09164, 1.0568, 0.09611, 0.9847],
+    [25, 0.1571, 0.9991, 0.1533, 0.9491],
+    [30, 0.2403, 0.9485, 0.2291, 0.9129]
+  ];
+  const H_LLUVIA = 3;        // altura de la lluvia hR [km] (≈ isoterma de 0 °C + 0,36 km en latitudes medias, Madrid/Valencia)
+  const EL_MIN_ATM = 5;      // por debajo de 5° la ley de la cosecante deja de valer: se acota
+
+  /** Interpolación lineal en una tabla [[x, y]] ordenada; fuera del rango, el valor del extremo. */
+  function _interp(tab, x, col) {
+    const c = col || 1;
+    if (x <= tab[0][0]) return tab[0][c];
+    if (x >= tab[tab.length - 1][0]) return tab[tab.length - 1][c];
+    let j = 0; while (tab[j + 1][0] < x) j++;
+    const [x0, x1] = [tab[j][0], tab[j + 1][0]], u = (x - x0) / (x1 - x0);
+    return tab[j][c] + u * (tab[j + 1][c] - tab[j][c]);
+  }
+
+  /** Coeficientes de lluvia {k, alfa} a fGHz: k interpolado en log-log y α en lin-log (P.838); polarización circular. */
+  function coeficientesLluvia(fGHz) {
+    const f = Math.min(30, Math.max(1, fGHz));
+    let j = 0; while (j < P838.length - 2 && P838[j + 1][0] < f) j++;
+    const a = P838[j], b = P838[j + 1], u = Math.log(f / a[0]) / Math.log(b[0] / a[0]);
+    const lk = (k0, k1) => Math.exp(Math.log(k0) + u * (Math.log(k1) - Math.log(k0)));
+    const kH = lk(a[1], b[1]), kV = lk(a[3], b[3]);
+    const aH = a[2] + u * (b[2] - a[2]), aV = a[4] + u * (b[4] - a[4]);
+    const k = (kH + kV) / 2;
+    return { k, alfa: (kH * aH + kV * aV) / (2 * k), kH, kV, aH, aV };
+  }
+
+  /**
+   * Atenuación atmosférica de UN trayecto Tierra–espacio [dB] (modelo ilustrativo de libro, ITU-R):
+   *   o = {fGHz, elDeg, lluvia [mm/h] = 0, hR [km] = 3, hs [km] = 0 (altura de la estación)}
+   *   · gases: A_g = A_cenit(f) / sin(el), con el acotada a ≥ 5°;
+   *   · lluvia (P.838 + reducción simple de P.618/CCIR): γ_R = k·R^α [dB/km], L_s = (hR − hs)/sin(el),
+   *     r = 1/(1 + L_s·cos(el)/L0), L0 = 35·e^(−0,015·R) km (R acotada a 100 mm/h), A_R = γ_R·L_s·r.
+   *     El factor de reducción tiene en cuenta que la lluvia intensa no cubre todo el trayecto. Con R ≤ 50 mm/h y
+   *     el ≥ 5° la atenuación crece con R y con f.
+   * Devuelve {gases, lluvia, total, gammaR, Ls, Le, el (usada)}.
+   */
+  function atenuacionAtmosferica(o) {
+    const el = Math.max(EL_MIN_ATM, o.elDeg == null ? 90 : o.elDeg), s = Math.sin(el * D2R);
+    const gases = _interp(GAS_CENIT, o.fGHz) / s;
+    const R = Math.min(100, Math.max(0, o.lluvia || 0));
+    let lluvia = 0, gammaR = 0, Ls = 0, Le = 0;
+    if (R > 0) {
+      const hR = o.hR == null ? H_LLUVIA : o.hR, hs = o.hs || 0;
+      const c = coeficientesLluvia(o.fGHz);
+      gammaR = c.k * Math.pow(R, c.alfa);
+      Ls = Math.max(0, hR - hs) / s;
+      const L0 = 35 * Math.exp(-0.015 * R);
+      Le = Ls / (1 + Ls * Math.cos(el * D2R) / L0);
+      lluvia = gammaR * Le;
+    }
+    return { gases, lluvia, total: gases + lluvia, gammaR, Ls, Le, el };
+  }
+
+  /**
+   * Barrido en frecuencia del alcance del radar con una antena de diámetro fijo (paso 4).
+   *   o = {D [m], eta, errDeg (error de seguimiento; null = sin error), radar: {Pt, sigma, Pmin, LdB},
+   *        fGHz: [..] (por defecto 1…12 GHz cada 0,05), atm: {elDeg, lluvia} (opcional)}
+   * R_max ∝ √f (G ∝ f², λ ∝ 1/f → G·λ ∝ f); la pérdida de apuntamiento crece con f porque el haz se estrecha, así que
+   * R_ef = R_max·10^(−L_ap/40) tiene un máximo interior. Con atm, R_ef,atm = R_ef·10^(−2·A/40) (ida y vuelta).
+   * Más allá del primer nulo (error ≥ θ_nulo) no hay eco: R_ef = 0.
+   * Devuelve {f (GHz), Rmax, Ref, RefAtm (m; null sin atm), fMax, RefMax (máximo de R_ef en la rejilla)}.
+   */
+  function barridoFrecuencia(o) {
+    const fs = o.fGHz || Array.from({ length: 221 }, (_, i) => 1 + i * 0.05);
+    const out = { f: [], Rmax: [], Ref: [], RefAtm: o.atm ? [] : null, fMax: NaN, RefMax: -Infinity };
+    for (const fg of fs) {
+      const f = fg * 1e9, g = ganancia(o.D, o.eta, f);
+      const Rm = alcanceRadar({ Pt: o.radar.Pt, G: g.G, f, sigma: o.radar.sigma, Pmin: o.radar.Pmin, LdB: o.radar.LdB });
+      let Re = Rm;
+      if (o.errDeg != null) {
+        const ka = 2 * Math.PI * f / C * (o.D / 2), thN = ka > X1 ? Math.asin(X1 / ka) * R2D : 90;
+        Re = o.errDeg < thN ? alcanceEfectivo(Rm, perdidaApuntamiento(o.errDeg, { a: o.D / 2, f }).idaVuelta) : 0;
+      }
+      out.f.push(fg); out.Rmax.push(Rm); out.Ref.push(Re);
+      if (o.atm) out.RefAtm.push(alcanceEfectivo(Re, 2 * atenuacionAtmosferica(Object.assign({ fGHz: fg }, o.atm)).total));
+      if (Re > out.RefMax) { out.RefMax = Re; out.fMax = fg; }
+    }
+    return out;
+  }
+
   return { C, MU, RE, WE, periodo, elementosCirculares, estacion, estadoECI, observar, pasada,
     besselJ1, jinc, patronReflector, haz, perdidaApuntamiento, clasificarApuntamiento,
-    ganancia, potenciaRadar, alcanceRadar, horizonte, alcanceEfectivo, friis };
+    ganancia, potenciaRadar, alcanceRadar, horizonte, alcanceEfectivo, friis,
+    GAS_CENIT, P838, H_LLUVIA, coeficientesLluvia, atenuacionAtmosferica, barridoFrecuencia };
 });

@@ -27,6 +27,7 @@
  *     navegador: su espectro es el de banda base trasladado a ±f_portadora con la mitad de amplitud (verificado
  *     en Python, p3_salida.txt: 0,500 / 0,2250 / 0,0437).
  * (e) Enlace de telemetría — DESARROLLO PROPIO (no sale de la P3), modelo de libro simple, ver telemetria().
+ * (f) Modulación digital BPSK/QPSK/8-PSK/16-QAM con codificación Gray — DESARROLLO PROPIO, ver enlaceDigital().
  *
  * Unidades: t en s, f en Hz, señales en V; X en V·s; fases de salida en grados.
  */
@@ -471,8 +472,141 @@
       snrSalidaDb: db(snrOut), ebn0Db: db(ebn0), ber, sobremodulada, modelo, perdidaDb: per };
   }
 
+  // =========================================================================== (f) modulación digital (desarrollo propio)
+  /**
+   * Modulaciones digitales lineales con codificación Gray (Proakis, «Digital Communications», cap. 4; Haykin):
+   *   'bpsk', 'qpsk' : Pb = Q(√(2·Eb/N0))                       (exacta; QPSK = dos BPSK en cuadratura)
+   *   '8psk'         : Pb ≈ (2/3)·Q(√(6·sin²(π/8)·Eb/N0))        (aproximación de vecinos más próximos, Ps/log2M)
+   *   'qam16'        : Pb ≈ (3/4)·Q(√(4·Eb/(5·N0)))  = (3/8)·erfc(√(2·Eb/(5·N0)))  (Gray, SNR alta)
+   */
+  const MOD_DIGITAL = Object.freeze({
+    bpsk: { M: 2, k: 1, nombre: 'BPSK' },
+    qpsk: { M: 4, k: 2, nombre: 'QPSK' },
+    '8psk': { M: 8, k: 3, nombre: '8-PSK' },
+    qam16: { M: 16, k: 4, nombre: '16-QAM' }
+  });
+  /** Banda de referencia W_ref [Hz] en la que está definida γ_ref (la B = 1 MHz del balance de Friis del paso 4). */
+  const W_REF = 1e6;
+  const ROLL_OFF = 0.35;
+  const BER_OBJETIVO = 1e-5;
+
+  /** Tasa de error de bit teórica de una modulación a Eb/N0 lineal (ebn0 ≥ 0). */
+  function berDigital(mod, ebn0) {
+    const x = Math.max(0, ebn0);
+    if (mod === 'bpsk' || mod === 'qpsk') return qfunc(Math.sqrt(2 * x));
+    if (mod === '8psk') { const s = Math.sin(Math.PI / 8); return (2 / 3) * qfunc(Math.sqrt(6 * s * s * x)); }
+    if (mod === 'qam16') return 0.75 * qfunc(Math.sqrt(0.8 * x));
+    throw new Error('Modulación digital desconocida: ' + mod);
+  }
+
+  /** Eb/N0 [dB] que da la tasa de error `objetivo` (bisección sobre la fórmula; Pb decrece con Eb/N0). */
+  function ebn0Requerido(mod, objetivo) {
+    const obj = objetivo || BER_OBJETIVO;
+    let a = -10, b = 40;
+    for (let i = 0; i < 200 && b - a > 1e-12; i++) {
+      const m = 0.5 * (a + b);
+      if (berDigital(mod, Math.pow(10, m / 10)) > obj) a = m; else b = m;
+    }
+    return 0.5 * (a + b);
+  }
+
+  /** Generador pseudoaleatorio determinista mulberry32 (enteros de 32 bits): devuelve una función → [0, 1). */
+  function mulberry32(semilla) {
+    let s = semilla >>> 0;
+    return function () {
+      s = (s + 0x6D2B79F5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** Código Gray de n: n ⊕ (n >> 1). */
+  const _gray = (n) => n ^ (n >> 1);
+  const _bits = (v, k) => v.toString(2).padStart(k, '0');
+
+  /**
+   * Constelación ideal con energía media por símbolo Es = 1 y etiquetas Gray: [{i, q, bits}].
+   *   BPSK ±1 · QPSK (±1 ± j)/√2 · 8-PSK e^{j2πm/8} · 16-QAM {±1, ±3}/√10 por eje (Gray en cada eje).
+   * Puntos vecinos difieren en un solo bit.
+   */
+  function constelacion(mod) {
+    const d = MOD_DIGITAL[mod]; if (!d) throw new Error('Modulación digital desconocida: ' + mod);
+    const out = [];
+    if (mod === 'bpsk') { out.push({ i: -1, q: 0, bits: '0' }, { i: 1, q: 0, bits: '1' }); return out; }
+    if (mod === 'qpsk') {
+      for (const bi of [0, 1]) for (const bq of [0, 1]) out.push({ i: (2 * bi - 1) / Math.SQRT2, q: (2 * bq - 1) / Math.SQRT2, bits: `${bi}${bq}` });
+      return out;
+    }
+    if (mod === '8psk') {
+      for (let m = 0; m < 8; m++) out.push({ i: Math.cos(2 * Math.PI * m / 8), q: Math.sin(2 * Math.PI * m / 8), bits: _bits(_gray(m), 3) });
+      return out;
+    }
+    const niv = [-3, -1, 1, 3], esc = 1 / Math.sqrt(10); // niveles por eje; Gray: 00 → −3, 01 → −1, 11 → +1, 10 → +3
+    for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) out.push({ i: niv[a] * esc, q: niv[b] * esc, bits: _bits(_gray(a), 2) + _bits(_gray(b), 2) });
+    return out;
+  }
+
+  /**
+   * Nube de n símbolos recibidos con ruido gaussiano complejo a Eb/N0 (dB): símbolo equiprobable de la constelación
+   * (Es = 1) + ruido de varianza N0/2 por componente, N0 = Es/(k·Eb/N0). Box–Muller sobre mulberry32(semilla):
+   * mismas muestras para los mismos parámetros. Devuelve {i, q, simbolo (índice), sigma}.
+   */
+  function muestrasRuido(mod, ebn0Db, n, semilla) {
+    const pts = constelacion(mod), k = MOD_DIGITAL[mod].k, N = n || 600;
+    const g = Math.pow(10, ebn0Db / 10), sigma = isFinite(ebn0Db) && g > 0 ? Math.sqrt(1 / (2 * k * g)) : Infinity;
+    const rnd = mulberry32(semilla == null ? 20261109 : semilla);
+    const I = new Float64Array(N), Q = new Float64Array(N), sim = new Uint8Array(N);
+    const sg = isFinite(sigma) ? sigma : 10;
+    for (let j = 0; j < N; j++) {
+      const s = Math.min(pts.length - 1, Math.floor(rnd() * pts.length));
+      const u1 = Math.max(1e-300, rnd()), u2 = rnd(), r = Math.sqrt(-2 * Math.log(u1));
+      sim[j] = s;
+      I[j] = pts[s].i + sg * r * Math.cos(2 * Math.PI * u2);
+      Q[j] = pts[s].q + sg * r * Math.sin(2 * Math.PI * u2); // en BPSK la componente Q es solo ruido (no afecta a la decisión)
+    }
+    return { i: I, q: Q, simbolo: sim, sigma };
+  }
+
+  /**
+   * Enlace de telemetría digital (desarrollo propio, fórmulas de libro).
+   *   o = {perdidaDb (dB, ≥ 0, un trayecto) | perdida: {ida}, snrRefDb (γ_ref), modulacion: 'bpsk' | 'qpsk' | '8psk' | 'qam16',
+   *        Rb [bit/s], rollOff = 0,35, objetivo = 1e-5, nMuestras = 600, semilla}
+   *
+   * Relación con el modelo analógico (telemetria()): γ_ref = S_R/(N0·W_ref) es la SNR de referencia en la banda
+   * W_ref = 1 MHz (la B del balance de Friis del paso 4). Con la pérdida, γ = γ_ref − L. Como Eb = S_R/Rb,
+   *   Eb/N0 = γ·W_ref/Rb  →  Eb/N0 [dB] = γ_ref − L + 10·log10(W_ref/Rb).
+   * El modelo analógico toma datos NRZ a Rb = 2W (Eb/N0 = γ/2): es el caso particular Rb = 2·W_ref de esta expresión.
+   * Filtro de coseno alzado: Rs = Rb/log2M, banda ocupada B = Rs·(1 + α), eficiencia log2M/(1 + α) bit/s/Hz.
+   * Devuelve {gammaDb, ebn0Db, esn0Db, ber, ebn0ReqDb, margenDb, Rs, anchoBanda, eficiencia, M, k, nombre,
+   *   constelacion, muestras, perdidaDb, bajoUmbral (= margen < 0), modelo}.
+   */
+  function enlaceDigital(o) {
+    const mod = o.modulacion || 'qpsk', d = MOD_DIGITAL[mod];
+    if (!d) throw new Error('Modulación digital desconocida: ' + mod);
+    const per = o.perdidaDb != null ? o.perdidaDb : (o.perdida ? o.perdida.ida : 0);
+    const Rb = o.Rb || 1e6, alfa = o.rollOff == null ? ROLL_OFF : o.rollOff, obj = o.objetivo || BER_OBJETIVO;
+    const gammaDb = o.snrRefDb - per;
+    const ebn0Db = gammaDb + 10 * Math.log10(W_REF / Rb);
+    const ebn0 = isFinite(ebn0Db) ? Math.pow(10, ebn0Db / 10) : 0;
+    const ber = berDigital(mod, ebn0);
+    const req = ebn0Requerido(mod, obj);
+    const Rs = Rb / d.k;
+    const out = { gammaDb, ebn0Db, esn0Db: ebn0Db + 10 * Math.log10(d.k), ber, ebn0ReqDb: req, margenDb: ebn0Db - req,
+      Rb, Rs, anchoBanda: Rs * (1 + alfa), eficiencia: d.k / (1 + alfa), rollOff: alfa, M: d.M, k: d.k, nombre: d.nombre,
+      objetivo: obj, perdidaDb: per, modelo: mod === '8psk' ? '8-PSK: Pb ≈ (2/3)·Q(√(6·sin²(π/8)·Eb/N0)) (aproximación Gray)'
+        : mod === 'qam16' ? '16-QAM: Pb ≈ (3/4)·Q(√(4Eb/5N0)) (Gray)' : `${d.nombre}: Pb = Q(√(2Eb/N0))` };
+    out.bajoUmbral = !(out.margenDb >= 0);
+    out.constelacion = constelacion(mod);
+    out.muestras = muestrasRuido(mod, ebn0Db, o.nMuestras || 600, o.semilla);
+    return out;
+  }
+
   return { P3, VOR, fft, ifft, frecuencias, xf, coeficientes, lineaEn, lineas, tiempos, integralTrapecio,
     analitica, envolvente, desenrollar, gradiente, frecuenciaInstantanea, besselJ, erfc, qfunc,
     tono, dsbam, am, fm, betaFM, carson, sobremodulacion, demodularAM, mensajeEnunciado, mediaEn,
-    casoDSBAM, casoFM, casoDemodAM, vorBandaBase, vorRumbo, casoVOR, telemetria };
+    casoDSBAM, casoFM, casoDemodAM, vorBandaBase, vorRumbo, casoVOR, telemetria,
+    MOD_DIGITAL, W_REF, ROLL_OFF, BER_OBJETIVO, berDigital, ebn0Requerido, mulberry32, constelacion, muestrasRuido,
+    enlaceDigital };
 });
