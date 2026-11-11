@@ -2,6 +2,7 @@
  * lezg-fases.js — Fases del estudio del lado aire del Aeropuerto de Zaragoza (LEZG)
  * Fase 2: aeronave crítica (Tema 3) · Fase 3: pistas y vientos (Tema 4)
  * Fase 4: rodaje y plataforma (Tema 5), con calculadora de los tres segmentos y semáforo del dictamen
+ * Fase 5: servidumbres y OLS (Tema 6), con calculadora de penetración en la aproximación de la 30R
  */
 
 (function () {
@@ -15,7 +16,7 @@
     { id: 't3', label: 'Aeronave crítica B787-9' },
     { id: 't4', label: 'Pistas y vientos' },
     { id: 't5', label: 'Rodaje y plataforma' },
-    { id: 't6', label: 'Servidumbres', pending: true }
+    { id: 't6', label: 'Servidumbres y OLS' }
   ];
 
   // ==========================================
@@ -435,14 +436,172 @@
   }
 
   // ==========================================
-  // Fase 5 · Tema 6 (pendiente)
+  // Fase 5 · Tema 6: servidumbres aeronáuticas y OLS
   // ==========================================
+  // Superficies de aproximación y transición de la cabecera 30R (clave 4, umbral a 254 m)
+  const OLS30R = { zThr: 254, zShi: 308, w0: 280, ini: 60, div: 0.15, p1: 0.02, l1: 3000, p2: 0.025, l2: 3600, ltot: 15000, trans: 1 / 7 };
+  const OBST_T6 = [
+    { lbl: 'Edificio de 45,5 m (A)', x: 1061.71, y: 298.34, z: 248.02, h: 45.52, def: true },
+    { lbl: 'Antena de 22 m en el eje (B)', x: 1458.82, y: 4.58, z: 250.0, h: 22.01 },
+    { lbl: 'Poste de 10,5 m', x: 694, y: 184, z: 250.4, h: 10.5 }
+  ];
+  let obst = Object.assign({}, OBST_T6[0]);
+
+  const SEMAFORO_T6 = [
+    { el: 'Superficies de aproximación (4 cabeceras)', est: 'verde', res: 'Libres', act: 'Ningún obstáculo no frangible las penetra; margen mínimo de 0,7 m en la 12L (vegetación podable). No hace falta umbral desplazado' },
+    { el: 'OFZ de la 30R (CAT II/III)', est: 'verde', res: 'Libre', act: 'Aproximación interna, transición interna y aterrizaje interrumpido sin objetos' },
+    { el: 'Transición de la 30R', est: 'rojo', res: 'Edificio de 45,5 m', act: 'Penetra 18,4 m y el plano de la senda de descenso 17,5 m; señalizar, estudio ante AESA y limitar construcciones en 430 m a cada lado' },
+    { el: 'Ascenso en el despegue (12L y 12R)', est: 'ambar', res: 'CWY declarada demasiado larga', act: '13 objetos penetran hasta 5,3 m; reducir la CWY a 420 m (12L) y 570 m (12R). No afecta al 787-9: se calcula con el TORA' },
+    { el: 'Relieve del suroeste (La Muela)', est: 'rojo', res: 'Supera las OLS', act: 'Hasta 184 m sobre la externa circular y 42 m sobre la horizontal interna; es relieve natural y debe constar en el plan de servidumbres' },
+    { el: 'Localizador y senda del ILS 30R', est: 'verde', res: 'Zonas próximas libres', act: 'Ningún objeto supera 20 m (LOC) ni 5 m (GP) en su zona plana; seis objetos de más de 70 m en el sector lejano del LOC' },
+    { el: 'VOR/DME ZAR y aerogeneradores', est: 'rojo', res: 'Cinco superan 52 m', act: 'Uno a 9,6 km y otro a 10,01 km del VOR; no autorizar más aerogeneradores en 10 km y pedir estudio de interferencias' },
+    { el: 'Servidumbres acústicas', est: 'gris', res: 'No analizadas', act: 'No se dispone de las huellas de ruido del aeropuerto' }
+  ];
+
   function renderT6(container) {
     container.innerHTML = `
       <div class="lezg-phase">
-        ${header('Fase 5 · Tema 6 · Servidumbres aeronáuticas', 'Próximamente',
-          'La última fase estudiará las superficies limitadoras de obstáculos y las servidumbres aeronáuticas del entorno de Zaragoza con la configuración de pistas ya validada.')}
+        ${header('Fase 5 · Tema 6 · Servidumbres aeronáuticas',
+          'Superficies limitadoras de obstáculos y servidumbres',
+          'Con las pistas tal como están en el AIP, se dimensionan las diez superficies limitadoras de obstáculos para la clave 4E del 787-9 y se cruzan con los 949 obstáculos publicados por ENAIRE, con el relieve del IGN y con las zonas de protección del ILS y del VOR/DME. El resultado dice qué construcciones impide la servidumbre y qué se puede dejar como está.')}
+
+        ${kpis([
+          { lbl: 'Obstáculos en aproximación', val: '0', sub: 'ninguno penetra · no hace falta umbral desplazado', cls: 'accent' },
+          { lbl: 'Edificio sobre la transición 30R', val: '+18,4 m', sub: '45,5 m de altura · sin señalizar', cls: 'highlight', glow: true },
+          { lbl: 'Terreno sobre las OLS', val: '116,5 km²', sub: 'de 811,7 km² · meseta de La Muela, hasta 184 m' },
+          { lbl: 'Aerogeneradores sobre el límite del VOR', val: '5', sub: 'superan los 52 m · uno a 9,6 km' }
+        ])}
+
+        <div class="methodology-block">
+          <div class="block-header"><span class="block-number">A</span><h3 class="block-title">Fichas de las superficies</h3></div>
+          <p class="block-description">La horizontal interna queda a <strong>308 m</strong>, la cónica sube hasta 408 m y la aproximación pasa de 314 m a 404 m en tres secciones (2 %, 2,5 % y horizontal). La horizontal interna corta la sección primera a 2.760 m del umbral 30R. La cota de cada punto del eje se interpola con el perfil del AIP.</p>
+          ${figura('img/lezg/t6_perfil_tipo.jpg', 'Perfil tipo de la superficie de aproximación de la 30R (clave 4): 2 % en 3.000 m, 2,5 % en 3.600 m y sección horizontal hasta 15 km.')}
+        </div>
+
+        <div class="methodology-block">
+          <div class="block-header"><span class="block-number">B</span><h3 class="block-title">Plano de servidumbres</h3></div>
+          <p class="block-description">Las huellas sobre el mapa del IGN: la horizontal interna llega a 4 km de las pistas e incluye Utebo, Casetas y Garrapinillos. Las aproximaciones atraviesan al sureste la plataforma logística y los barrios del sur de Zaragoza.</p>
+          ${figura('img/lezg/t6_plano_general.jpg', 'Superficies limitadoras de obstáculos de LEZG sobre el mapa del IGN, con los aerogeneradores del AIP.', 'lezg-figure-narrow')}
+          ${figura('img/lezg/t6_plano_detalle.jpg', 'Detalle del entorno: obstáculos que penetran, los cuatro verificados (A a D), radioayudas y terreno por encima de la superficie.')}
+        </div>
+
+        <!-- Calculadora de penetración -->
+        <div class="methodology-block lezg-calc" id="lezg-calc-t6">
+          <div class="block-header"><span class="block-number">C</span><h3 class="block-title">¿Penetra tu obstáculo en la aproximación de la 30R?</h3></div>
+          <p class="block-description">Cota límite = cota de la superficie de aproximación, o la de la transición si el obstáculo queda fuera de su ancho. Es el procedimiento de los ejercicios de clase: <strong>ΔZ = (Z<sub>terreno</sub> + h) − Z<sub>lim</sub></strong>. Elige un caso real o mueve los controles.</p>
+          <div class="lezg-calc-presets">${OBST_T6.map((p, i) => `<button class="toggle-btn ${p.def ? 'active' : ''}" data-obst="${i}">${p.lbl}</button>`).join('')}</div>
+          <div class="lezg-calc-controls">
+            <label class="lezg-slider"><span>Distancia al umbral 30R, antes de pista <strong id="t6-x-lbl"></strong></span>
+              <input type="range" class="custom-range" id="t6-x" min="100" max="6000" step="10" value="1062" /></label>
+            <label class="lezg-slider"><span>Distancia lateral al eje <strong id="t6-y-lbl"></strong></span>
+              <input type="range" class="custom-range" id="t6-y" min="0" max="1500" step="5" value="298" /></label>
+            <label class="lezg-slider"><span>Cota del terreno <strong id="t6-z-lbl"></strong></span>
+              <input type="range" class="custom-range" id="t6-z" min="240" max="300" step="0.5" value="248" /></label>
+            <label class="lezg-slider"><span>Altura del obstáculo <strong id="t6-h-lbl"></strong></span>
+              <input type="range" class="custom-range" id="t6-h" min="1" max="80" step="0.5" value="45.5" /></label>
+          </div>
+          <div class="lezg-kpi-grid" id="t6-results"></div>
+          <div class="runway-conclusion-box" id="t6-conclusion"></div>
+        </div>
+
+        <div class="methodology-block">
+          <div class="block-header"><span class="block-number">D</span><h3 class="block-title">Obstáculos críticos y relieve</h3></div>
+          <p class="block-description">El edificio A supera la transición 18,4 m y se podría construir hasta 27,2 m en ese punto. La antena B penetra 5,3 m el ascenso en el despegue de la 12L por la zona libre de 690 m; con 420 m deja de hacerlo.</p>
+          <div class="lezg-figure-grid">
+            ${figura('img/lezg/t6_seccion_a.jpg', 'Sección a 1.062 m del umbral 30R: el edificio A penetra la transición lateral de la aproximación.')}
+            ${figura('img/lezg/t6_perfil_se.jpg', 'Perfil del sector sureste: obstáculos y ascenso en el despegue con la zona libre de 690 m y de 420 m.')}
+          </div>
+          ${figura('img/lezg/t6_relieve.jpg', 'Altura del terreno sobre la superficie limitadora más restrictiva (MDT25 del IGN).', 'lezg-figure-narrow')}
+        </div>
+
+        <div class="methodology-block">
+          <div class="block-header"><span class="block-number">E</span><h3 class="block-title">Servidumbres radioeléctricas</h3></div>
+          <p class="block-description">Las zonas planas del localizador y la senda del ILS 30R están libres; en el VOR/DME, cinco aerogeneradores del AIP superan el límite de 52 m, y el más cercano está a 9,6 km, dentro del cilindro de 10 km.</p>
+          ${figura('img/lezg/t6_radio.jpg', 'Zonas de protección del ILS 30R y cilindros y cono del VOR/DME con los aerogeneradores.')}
+        </div>
+
+        <div class="methodology-block" id="lezg-semaforo-t6">
+          <div class="block-header"><span class="block-number">F</span><h3 class="block-title">Dictamen por elemento</h3></div>
+          <div class="table-responsive">
+            <table class="compact-table lezg-sem-table">
+              <thead><tr><th></th><th>Elemento</th><th>Resolución</th><th>Actuación propuesta</th></tr></thead>
+              <tbody>${SEMAFORO_T6.map(s => `
+                <tr>
+                  <td><span class="lezg-dot lezg-dot-${s.est}" title="${EST_LBL[s.est]}"></span></td>
+                  <td><strong>${s.el}</strong></td>
+                  <td class="lezg-sem-res lezg-sem-res-${s.est}">${s.res}</td>
+                  <td>${s.act}</td>
+                </tr>`).join('')}</tbody>
+            </table>
+          </div>
+        </div>
+
+        ${dictamen('<strong>Compatible, con incumplimientos localizados.</strong> La configuración actual admite el 787-9 sin umbral desplazado. Hay que señalizar el edificio de 45,5 m y pedir el estudio aeronáutico a AESA, recortar las zonas libres de obstáculos declaradas de la 12L y la 12R, no autorizar más aerogeneradores en el entorno del VOR/DME y dejar constancia del relieve del suroeste en el plan de servidumbres.')}
       </div>`;
+
+    setupObstacleCalc(container);
+  }
+
+  // ---------- Calculadora de penetración (30R) ----------
+  function limiteAprox30R(x, y) {
+    const o = OLS30R;
+    const d = x - o.ini;
+    if (d < 0 || d > o.ltot) return null;
+    const zAp = o.zThr + o.p1 * Math.min(d, o.l1) + o.p2 * Math.min(Math.max(d - o.l1, 0), o.l2);
+    const semi = o.w0 / 2 + o.div * d;
+    if (Math.abs(y) <= semi) return { sup: 'Aproximación', zLim: zAp, semi, zAp, d };
+    const zTr = zAp + (Math.abs(y) - semi) * o.trans;
+    return { sup: zTr >= o.zShi ? 'Horizontal interna' : 'Transición', zLim: Math.min(zTr, o.zShi), semi, zAp, d };
+  }
+
+  function setupObstacleCalc(root) {
+    const ids = ['x', 'y', 'z', 'h'];
+    const inp = {};
+    ids.forEach(k => { inp[k] = root.querySelector('#t6-' + k); });
+    const btns = root.querySelectorAll('[data-obst]');
+    const sync = () => { ids.forEach(k => { inp[k].value = obst[k]; }); updateObstacleCalc(root); };
+    ids.forEach(k => inp[k].addEventListener('input', () => {
+      obst[k] = +inp[k].value;
+      btns.forEach(b => b.classList.remove('active'));
+      updateObstacleCalc(root);
+    }));
+    btns.forEach(b => b.addEventListener('click', () => {
+      obst = Object.assign({}, OBST_T6[+b.dataset.obst]);
+      btns.forEach(x => x.classList.toggle('active', x === b));
+      sync();
+    }));
+    sync();
+  }
+
+  function updateObstacleCalc(root) {
+    const set = (id, v) => { root.querySelector(id).textContent = v; };
+    set('#t6-x-lbl', fmt(obst.x, 0) + ' m'); set('#t6-y-lbl', fmt(obst.y, 0) + ' m');
+    set('#t6-z-lbl', fmt(obst.z, 1) + ' m'); set('#t6-h-lbl', fmt(obst.h, 1) + ' m');
+    const r = limiteAprox30R(obst.x, obst.y);
+    const zObst = obst.z + obst.h;
+    const res = root.querySelector('#t6-results'), concl = root.querySelector('#t6-conclusion');
+    if (!r) {
+      res.innerHTML = '';
+      concl.innerHTML = '<p>El punto queda fuera de la superficie de aproximación (más allá de 15 km o antes del borde interior). Compruébalo contra el resto de superficies.</p>';
+      return;
+    }
+    const dz = zObst - r.zLim;
+    const hMax = r.zLim - obst.z;
+    const tarjetas = [
+      { lbl: 'Superficie que gobierna', val: r.sup, sub: 'semiancho de la aproximación: ' + fmt(r.semi, 1) + ' m' },
+      { lbl: 'Cota límite', val: fmt(r.zLim, 2) + ' m', sub: 'cota del obstáculo: ' + fmt(zObst, 2) + ' m' },
+      { lbl: dz > 0 ? 'Penetración' : 'Margen', val: (dz > 0 ? '+' : '−') + fmt(Math.abs(dz), 2) + ' m', cls: dz > 0 ? 'accent' : 'highlight', glow: dz > 0, sub: dz > 0 ? 'vulnera la servidumbre' : 'por debajo de la superficie' },
+      { lbl: 'Altura máxima permitida', val: fmt(Math.max(hMax, 0), 1) + ' m', sub: 'sobre un terreno de ' + fmt(obst.z, 1) + ' m' }
+    ];
+    res.innerHTML = tarjetas.map(k => `
+      <div class="runway-card ${k.glow ? 'highlight-glow' : ''}">
+        <span class="runway-card-lbl">${k.lbl}</span>
+        <span class="runway-card-val ${k.cls || ''}">${k.val}</span>
+        <span class="runway-card-sub">${k.sub}</span>
+      </div>`).join('');
+    concl.innerHTML = dz > 0
+      ? `<p><strong>Vulnera la servidumbre</strong> en ${fmt(dz, 2)} m. Debe reducirse a ${fmt(Math.max(hMax, 0), 1)} m, reubicarse o justificarse con un estudio aeronáutico o por apantallamiento.</p>`
+      : `<p><strong>No penetra.</strong> Queda ${fmt(-dz, 2)} m por debajo de la superficie de ${r.sup.toLowerCase()}.</p>`;
   }
 
   window.renderLezgFase = function (id, container) {

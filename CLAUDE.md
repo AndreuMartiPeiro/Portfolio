@@ -5,7 +5,7 @@ Web estática (HTML + CSS + JS sin build) publicada desde la raíz del repo.
 - `index.html` — estructura (navbar, portada, vista de proyecto).
 - `styles.css` — sistema de diseño (tokens en `:root`) + estilos del proyecto de Zaragoza (`.zaragoza-*`, `.lezg-*`).
 - `app.js` — router por hash (`#/project/<id>`), render de tarjetas/pestañas/pasos, gráficos Plotly y efectos (revelado, navbar, transiciones).
-- `projects.js` — datos de los proyectos. `zaragoza-view.js` / `zaragoza-data.js` — fase de demanda de Zaragoza; `lezg-fases.js` — fases T3–T5 (calculadora y semáforo).
+- `projects.js` — datos de los proyectos. `zaragoza-view.js` / `zaragoza-data.js` — fase de demanda de Zaragoza; `lezg-fases.js` — fases T3–T6 (calculadoras y semáforo).
 - `tomahawk/` — fichas propias del modelo CAD y del CFD, con la misma paleta.
 
 ## Estilo visual (obligatorio)

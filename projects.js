@@ -340,9 +340,9 @@ La <strong>zona verde sombreada</strong> marca la ventana de crucero operativo d
   {
     id: "zaragoza",
     title: "Aeropuerto de Zaragoza (LEZG): planificación del lado aire",
-    subtitle: "De la previsión de demanda a 2050 al diseño de pistas, calles de rodaje y plataforma con el Boeing 787-9 como aeronave crítica",
-    description: "Estudio por fases del Aeropuerto de Zaragoza: previsión econométrica de la demanda hasta 2050, impacto del Boeing 787-9, orientación de pistas por vientos y auditoría del sistema de rodadura y plataforma según el Anexo 14 de la OACI.",
-    tags: ["Ingeniería Aeroportuaria", "Previsión de Demanda", "Anexo 14 OACI", "Lado aire", "AENA"],
+    subtitle: "De la previsión de demanda a 2050 al diseño de pistas, calles de rodaje, plataforma y servidumbres con el Boeing 787-9 como aeronave crítica",
+    description: "Estudio por fases del Aeropuerto de Zaragoza: previsión econométrica de la demanda hasta 2050, impacto del Boeing 787-9, orientación de pistas por vientos, auditoría del sistema de rodadura y plataforma según el Anexo 14 de la OACI y servidumbres aeronáuticas con las superficies limitadoras de obstáculos frente a los obstáculos reales del AIP.",
+    tags: ["Ingeniería Aeroportuaria", "Previsión de Demanda", "Anexo 14 OACI", "Lado aire", "Servidumbres", "AENA"],
     image: "img/zaragoza.png",
     status: "Completado",
     date: "2026",
